@@ -1,18 +1,21 @@
 import { useState, useEffect } from 'react';
 import { startOfDay, addDays } from 'date-fns';
+import { toZonedTime, fromZonedTime } from 'date-fns-tz';
 
-export function useMidnightClock(): Date {
-  const [now, setNow] = useState<Date>(new Date());
+export function useMidnightClock(timezone: string): Date {
+  const [now, setNow] = useState<Date>(() => new Date());
 
   useEffect(() => {
     const nowMs = Date.now();
-    const nextMidnight = startOfDay(addDays(nowMs, 1));
-    const msUntilMidnight = nextMidnight.getTime() - nowMs;
+    const zonedNow = toZonedTime(nowMs, timezone);
+    const nextZonedMidnight = startOfDay(addDays(zonedNow, 1));
+    const nextMidnightUtc = fromZonedTime(nextZonedMidnight, timezone);
+    const msUntilMidnight = nextMidnightUtc.getTime() - nowMs;
     const timer = setTimeout(() => {
       setNow(new Date());
     }, msUntilMidnight);
     return () => clearTimeout(timer);
-  }, [now]);
+  }, [now, timezone]);
 
   return now;
 }

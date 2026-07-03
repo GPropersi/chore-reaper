@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Outlet } from 'react-router-dom';
 import NavBar from './components/nav/NavBar';
 import AdminPanel from './components/admin/AdminPanel';
+import ChoresView from './components/chore/ChoresView';
 
 type Me = {
   id: number;
@@ -35,8 +36,13 @@ function Layout({ isAdmin }: { isAdmin: boolean }) {
   );
 }
 
-function Home() {
-  return <div className="p-4 text-gray-400">Chores coming soon.</div>;
+function Home({ me }: { me: Me | null }) {
+  if (!me) return null;
+  return (
+    <div className="p-4">
+      <ChoresView organizationTimezone={me.organizationTimezone} timezone={me.timezone} />
+    </div>
+  );
 }
 
 function AdminRoute({ me }: { me: Me | null }) {
@@ -56,7 +62,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route element={<Layout isAdmin={me?.role === 'admin'} />}>
-          <Route path="/" element={<Home />} />
+          <Route path="/" element={<Home me={me} />} />
           <Route path="/admin" element={<AdminRoute me={me} />} />
         </Route>
       </Routes>

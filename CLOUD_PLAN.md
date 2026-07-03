@@ -257,42 +257,55 @@ already existing, and there's no self-registration to create one.
 All of this phase is **[A]** — pure frontend logic, no Cloudflare account dependency.
 `useMidnightClock.ts`, `choreSort.ts`, and `choreBarMath.ts` start as seeded.
 
+**Scope note**: this phase's own tests (2.2's e2e case in particular) require a real chore list
+rendered somewhere in the app, which didn't exist yet — `Home` was still a placeholder from Phase 1.
+Closing that gap required two additions not originally itemized above: `backend/src/seed-mock-chores.ts`
+(+ `backend/scripts/seed-mock-chores.ts` CLI wrapper, `npm run seed-mock-chores`), a mock-data builder
+following the `bootstrap-admin.ts` pattern for seeding realistic dev/test chore data into an org; and a
+new `ChoresView` component (`frontend/src/components/chore/ChoresView.tsx`) that fetches
+`GET /api/chores`, sorts via `orderChores` using org-timezone "today", and renders `ChoreList` wired to
+the already-built complete/delete endpoints — wired into `App.tsx`'s `Home` route in place of the
+placeholder. Both were glue over already-built, already-tested backend routes — no new backend logic.
+
 ### 2.1 Timezone-aware "today", driven by the org
 
-- [ ] **[A] RED**: `useMidnightClock(timezone: string)` — given a fixed system clock and `timezone =
+- [x] **[A] RED**: `useMidnightClock(timezone: string)` — given a fixed system clock and `timezone =
 'Pacific/Kiritimati'` (UTC+14) vs `timezone = 'Pacific/Niue'` (UTC-11), the computed "next
       midnight" target differs by the expected offset. Testing against two extreme, far-apart zones (not
       just "any non-UTC zone") is deliberate — it's the only way to prove the hook is actually using the
       passed-in timezone rather than coincidentally matching the test runner's own local timezone
-- [ ] **[A] GREEN**: implement using `date-fns-tz`'s `toZonedTime`/`fromZonedTime`, removing any direct
+- [x] **[A] GREEN**: implement using `date-fns-tz`'s `toZonedTime`/`fromZonedTime`, removing any direct
       `new Date()`-as-ambient-local-time dependency
-- [ ] **[A] REFACTOR**: confirm `choreSort.ts` and `choreBarMath.ts` need no changes from their seeded
+- [x] **[A] REFACTOR**: confirmed `choreSort.ts` and `choreBarMath.ts` need no changes from their seeded
       form — they already take `today`/`day` as explicit parameters; only _which_ timezone the caller
       resolves "today" from changes
 
 ### 2.2 Wire the org's timezone into scoring — not the viewing user's
 
-- [ ] **[A] RED**: `GET /api/me` returns both `organizationTimezone` (from `organizations.timezone`) and
+- [x] **[A] RED**: `GET /api/me` returns both `organizationTimezone` (from `organizations.timezone`) and
       `timezone` (the user's own, display-only, falling back to `organizationTimezone` if unset) as
-      distinct fields
-- [ ] **[A] GREEN**: implement
-- [ ] **[A] RED**: given a mocked `/api/me` response, `App` passes `organizationTimezone` — not the
+      distinct fields — this was already built and tested ahead of schedule in Phase 1.6
+- [x] **[A] GREEN**: implement — already done in Phase 1.6
+- [x] **[A] RED**: given a mocked `/api/me` response, `App` passes `organizationTimezone` — not the
       browser's ambient timezone, and not the user's personal `timezone` — into `useMidnightClock`
-- [ ] **[A] GREEN**: implement
-- [ ] **[A] RED (the property that matters)**: two _different_ authenticated users in the _same_ org,
+- [x] **[A] GREEN**: implement — a new `ChoresView` component wires `/api/chores` fetching + sorting +
+      rendering into `Home`, replacing the placeholder; `App` passes `me.organizationTimezone` into it
+- [x] **[A] RED (the property that matters)**: two _different_ authenticated users in the _same_ org,
       each with a different personal `timezone` set, produce **identical** urgency ordering and overdue
       status for the same seeded chore data
-- [ ] **[A] GREEN**: confirmed by 2.2's wiring once org-level timezone is what's threaded through
-- [ ] **[A] RED** (e2e): two Playwright contexts with different emulated timezones (`timezoneId` in
+- [x] **[A] GREEN**: confirmed by 2.2's wiring once org-level timezone is what's threaded through
+- [x] **[A] RED** (e2e): two Playwright contexts with different emulated timezones (`timezoneId` in
       `browserNewContext` options), logged in (via test-key-signed JWTs, per 1.9) as two different users
       in the same org, render the exact same sort order and bar colors for the same chore list
+- [x] **[A] GREEN**: `e2e/timezone-parity.spec.ts`; `e2e/global-setup.ts` extended to seed per-user
+      personal timezones and a couple of sample chores for the E2E org
 
 ### 2.3 Personal timezone for display only
 
-- [ ] **[A] RED**: a timestamp rendered via `CompletionInfo` (or equivalent) is formatted in the
+- [x] **[A] RED**: a timestamp rendered via `CompletionInfo` (or equivalent) is formatted in the
       _viewing user's_ own `timezone`, distinct from and independent of whatever `organizationTimezone`
       is driving the score in the same view
-- [ ] **[A] GREEN**: implement, sourcing from `/api/me`'s `timezone` field for formatting only — never
+- [x] **[A] GREEN**: implement, sourcing from `/api/me`'s `timezone` field for formatting only — never
       fed into `useMidnightClock` or any scoring path
 
 ---

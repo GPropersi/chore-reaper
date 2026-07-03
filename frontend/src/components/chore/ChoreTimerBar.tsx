@@ -10,6 +10,7 @@ import CompletionInfo from './CompletionInfo';
 type ChoreTimerBarProps = {
   chore: Chore;
   day: Date;
+  timezone: string;
   isSimulating: boolean;
   onComplete: (id: number, date: Date) => void;
   onDelete: (id: number) => void;
@@ -19,6 +20,7 @@ type ChoreTimerBarProps = {
 export default function ChoreTimerBar({
   chore,
   day,
+  timezone,
   isSimulating,
   onComplete,
   onDelete,
@@ -69,7 +71,7 @@ export default function ChoreTimerBar({
       <div className="absolute inset-0 px-4 grid grid-cols-3 items-center gap-2">
         <ChoreInfo name={chore.name} />
         <div className="text-xs text-white text-opacity-80 text-center">Every {chore.frequency} days</div>
-        <CompletionInfo date={chore.dateLastCompleted} daysSince={daysSince} />
+        <CompletionInfo date={chore.dateLastCompleted} daysSince={daysSince} timezone={timezone} />
       </div>
 
       {isOverdue && <span className="sr-only">Overdue</span>}

@@ -9,7 +9,8 @@
     "test:watch": "vitest",
     "migrate:local": "wrangler d1 migrations apply DB --local",
     "migrate:remote": "wrangler d1 migrations apply DB --remote",
-    "bootstrap-admin": "tsx scripts/bootstrap-admin.ts"
+    "bootstrap-admin": "tsx scripts/bootstrap-admin.ts",
+    "seed-mock-chores": "tsx scripts/seed-mock-chores.ts"
   },
   "dependencies": {
     "hono": "^4.12.27",
