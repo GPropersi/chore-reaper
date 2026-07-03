@@ -3,7 +3,7 @@
 This repo was seeded from `chores4irl`, a single-household, Raspberry Pi kiosk version of the same
 product — fully local, LAN-only, zero internet dependency, one physical device per household. This
 document carries forward the tradeoff analysis that informed building cloud-native here instead of
-staying with that model. It's inherited context, not a literal before/after within this repo — tasktracker
+staying with that model. It's inherited context, not a literal before/after within this repo — chore-reaper
 never had a local mode to compare against directly.
 
 ## What the cloud-native model buys

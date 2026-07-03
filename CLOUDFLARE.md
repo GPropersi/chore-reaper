@@ -1,4 +1,4 @@
-# Tasktracker: Architecture (Cloudflare, Free Tier)
+# Chore Reaper: Architecture (Cloudflare, Free Tier)
 
 Multi-tenant, cloud-hosted chore/task tracker. This repo is a one-time seed from a sibling project
 (`chores4irl` — a single-household, Raspberry Pi kiosk version of the same idea) — the reference material
@@ -36,7 +36,7 @@ Every piece maps to a Cloudflare free-tier product; no paid step is required for
 ## Repository layout
 
 ```
-tasktracker/
+chore-reaper/
   backend/                    Workers + Hono + D1
   frontend/                   React + Vite, Cloudflare Pages target
   types/                      SharedTypes.d.ts — the Chore/ApiResponse contract, both sides import from here

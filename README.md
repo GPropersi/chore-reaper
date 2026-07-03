@@ -1,4 +1,4 @@
-# tasktracker
+# Chore Reaper
 
 Multi-tenant, cloud-hosted chore/task tracker on Cloudflare (Workers + Hono, D1, Pages, Access).
 

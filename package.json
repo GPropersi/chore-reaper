@@ -1,5 +1,5 @@
 {
-  "name": "tasktracker",
+  "name": "chore-reaper",
   "private": true,
   "type": "module",
   "workspaces": [

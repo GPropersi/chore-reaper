@@ -1,4 +1,4 @@
-# Tasktracker: Execution Plan
+# Chore Reaper: Execution Plan
 
 Execution-focused companion to `CLOUDFLARE.md` (design/rationale). This document is the how and in what
 order — it is self-contained enough to execute without additional context.
@@ -83,7 +83,7 @@ Fixed decisions referenced throughout — set once here rather than re-decided p
       `ACCESS_AUD` per Conventions
 - [x] **[A] Verify**: `wrangler dev` boots `backend/` locally with the `DB` binding reachable; a placeholder
       Worker route returns 200
-- [ ] **[B]** `wrangler d1 create tasktracker` (or equivalent); replace the placeholder `database_id` in
+- [ ] **[B]** `wrangler d1 create chore-reaper` (or equivalent); replace the placeholder `database_id` in
       `wrangler.toml` with the real one
 - [ ] **[B]** Create a Cloudflare Pages project pointed at `frontend/`'s build output
 - [ ] **[B]** Stand up the Zero Trust team + an Access Application for the chosen hostname

@@ -1,4 +1,4 @@
-# tasktracker — Project Instructions
+# chore-reaper — Project Instructions
 
 ## Bootstrap phase — delete this section once it's no longer needed
 
