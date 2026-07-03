@@ -109,10 +109,10 @@ describe('updateChore', () => {
 });
 
 describe('completeChore', () => {
-  it('updates dateLastCompleted and increments version when expectedVersion matches', async () => {
+  it('updates dateLastCompleted and increments version', async () => {
     const created = await createChore(env.DB, ORG_A, baseChoreInput);
 
-    const result = await completeChore(env.DB, ORG_A, created.id, '2026-07-01T00:00:00.000Z', 1);
+    const result = await completeChore(env.DB, ORG_A, created.id, '2026-07-01T00:00:00.000Z');
 
     expect(result.status).toBe('ok');
     if (result.status === 'ok') {
@@ -121,18 +121,41 @@ describe('completeChore', () => {
     }
   });
 
-  it('returns conflict when expectedVersion is stale', async () => {
+  it('keeps the later of two competing completions regardless of call order — never conflicts', async () => {
     const created = await createChore(env.DB, ORG_A, baseChoreInput);
 
-    const result = await completeChore(env.DB, ORG_A, created.id, '2026-07-01T00:00:00.000Z', 99);
+    const earlier = await completeChore(env.DB, ORG_A, created.id, '2026-07-01T02:00:00.000Z');
+    const later = await completeChore(env.DB, ORG_A, created.id, '2026-07-01T03:00:00.000Z');
 
-    expect(result.status).toBe('conflict');
+    expect(earlier.status).toBe('ok');
+    expect(later.status).toBe('ok');
+    if (later.status === 'ok') {
+      expect(later.chore.dateLastCompleted).toBe('2026-07-01T03:00:00.000Z');
+    }
+  });
+
+  it('leaves the stored timestamp unchanged when an earlier completion arrives after a later one', async () => {
+    const created = await createChore(env.DB, ORG_A, baseChoreInput);
+
+    await completeChore(env.DB, ORG_A, created.id, '2026-07-01T03:00:00.000Z');
+    const result = await completeChore(env.DB, ORG_A, created.id, '2026-07-01T02:00:00.000Z');
+
+    expect(result.status).toBe('ok');
+    if (result.status === 'ok') {
+      expect(result.chore.dateLastCompleted).toBe('2026-07-01T03:00:00.000Z');
+    }
+  });
+
+  it('returns not-found for a nonexistent chore', async () => {
+    const result = await completeChore(env.DB, ORG_A, 999_999, '2026-07-01T00:00:00.000Z');
+
+    expect(result.status).toBe('not_found');
   });
 
   it('returns not-found for a chore in a different org', async () => {
     const created = await createChore(env.DB, ORG_B, baseChoreInput);
 
-    const result = await completeChore(env.DB, ORG_A, created.id, '2026-07-01T00:00:00.000Z', 1);
+    const result = await completeChore(env.DB, ORG_A, created.id, '2026-07-01T00:00:00.000Z');
 
     expect(result.status).toBe('not_found');
   });

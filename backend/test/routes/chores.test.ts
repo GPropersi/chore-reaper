@@ -130,7 +130,7 @@ describe('PATCH /api/chores/:id/complete', () => {
     const res = await testApp(ORG_A).request(`/api/chores/${created.id}/complete`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ version: 1 }),
+      body: JSON.stringify({}),
     });
     expect(res.status).toBe(400);
   });
@@ -139,9 +139,52 @@ describe('PATCH /api/chores/:id/complete', () => {
     const res = await testApp(ORG_A).request('/api/chores/999999/complete', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dateLastCompleted: '2026-07-01T00:00:00.000Z', version: 1 }),
+      body: JSON.stringify({ dateLastCompleted: '2026-07-01T00:00:00.000Z' }),
     });
     expect(res.status).toBe(404);
+  });
+
+  it('returns 200 and updates dateLastCompleted', async () => {
+    const createRes = await testApp(ORG_A).request('/api/chores', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(validChoreBody),
+    });
+    const created = ((await createRes.json()) as { data: { id: number } }).data;
+
+    const res = await testApp(ORG_A).request(`/api/chores/${created.id}/complete`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dateLastCompleted: '2026-07-01T00:00:00.000Z' }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { data: { dateLastCompleted: string } };
+    expect(body.data.dateLastCompleted).toBe('2026-07-01T00:00:00.000Z');
+  });
+
+  it('keeps the later completion when an earlier one arrives afterward — never conflicts', async () => {
+    const createRes = await testApp(ORG_A).request('/api/chores', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(validChoreBody),
+    });
+    const created = ((await createRes.json()) as { data: { id: number } }).data;
+
+    const laterRes = await testApp(ORG_A).request(`/api/chores/${created.id}/complete`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dateLastCompleted: '2026-07-01T03:00:00.000Z' }),
+    });
+    expect(laterRes.status).toBe(200);
+
+    const earlierRes = await testApp(ORG_A).request(`/api/chores/${created.id}/complete`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dateLastCompleted: '2026-07-01T02:00:00.000Z' }),
+    });
+    expect(earlierRes.status).toBe(200);
+    const body = (await earlierRes.json()) as { data: { dateLastCompleted: string } };
+    expect(body.data.dateLastCompleted).toBe('2026-07-01T03:00:00.000Z');
   });
 });
 

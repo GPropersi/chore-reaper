@@ -145,23 +145,29 @@ export async function updateChore(
   );
 }
 
+export type CompleteResult = { status: 'ok'; chore: ChoreWire } | { status: 'not_found' };
+
 export async function completeChore(
   db: D1Database,
   organizationId: number,
   id: number,
   dateLastCompleted: string,
-  expectedVersion: number,
-): Promise<MutationResult> {
-  return applyVersionedMutation(db, organizationId, id, expectedVersion, () =>
-    db
-      .prepare(
-        `UPDATE chores
-         SET date_last_completed = ?, version = version + 1
-         WHERE id = ? AND organization_id = ? AND version = ?`,
-      )
-      .bind(dateLastCompleted, id, organizationId, expectedVersion)
-      .run(),
-  );
+): Promise<CompleteResult> {
+  const existing = await fetchByOrg(db, organizationId, id);
+  if (!existing) return { status: 'not_found' };
+
+  await db
+    .prepare(
+      `UPDATE chores
+       SET date_last_completed = CASE WHEN date_last_completed < ? THEN ? ELSE date_last_completed END,
+           version = version + 1
+       WHERE id = ? AND organization_id = ?`,
+    )
+    .bind(dateLastCompleted, dateLastCompleted, id, organizationId)
+    .run();
+
+  const row = await fetchByOrg(db, organizationId, id);
+  return { status: 'ok', chore: rowToChore(row!) };
 }
 
 export async function deleteChore(db: D1Database, organizationId: number, id: number): Promise<boolean> {

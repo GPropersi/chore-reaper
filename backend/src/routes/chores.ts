@@ -54,24 +54,15 @@ chores.patch('/:id/complete', async (c) => {
     return c.json({ success: false, error: 'Invalid id' } satisfies ApiResponse<never>, 400);
   }
   const body = await c.req.json<Record<string, unknown>>();
-  if (!body.dateLastCompleted || body.version == null) {
+  if (!body.dateLastCompleted) {
     return c.json(
-      { success: false, error: 'dateLastCompleted and version are required' } satisfies ApiResponse<never>,
+      { success: false, error: 'dateLastCompleted is required' } satisfies ApiResponse<never>,
       400,
     );
   }
-  const result = await completeChore(
-    c.env.DB,
-    c.var.organizationId,
-    id,
-    String(body.dateLastCompleted),
-    Number(body.version),
-  );
+  const result = await completeChore(c.env.DB, c.var.organizationId, id, String(body.dateLastCompleted));
   if (result.status === 'not_found') {
     return c.json({ success: false, error: 'Chore not found' } satisfies ApiResponse<never>, 404);
-  }
-  if (result.status === 'conflict') {
-    return c.json({ success: false, error: 'Chore was changed elsewhere' } satisfies ApiResponse<never>, 409);
   }
   return c.json({ success: true, data: result.chore } satisfies ApiResponse<typeof result.chore>);
 });

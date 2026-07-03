@@ -29,12 +29,10 @@ export default function ChoresView({ organizationTimezone, timezone }: ChoresVie
   }, []);
 
   async function handleComplete(id: number, date: Date) {
-    const chore = chores.find((c) => c.id === id);
-    if (!chore) return;
     const res = await fetch(`/api/chores/${id}/complete`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dateLastCompleted: date.toISOString(), version: chore.version }),
+      body: JSON.stringify({ dateLastCompleted: date.toISOString() }),
     });
     const body = (await res.json()) as ApiResponse<ChoreWire>;
     if (body.success && body.data) {
