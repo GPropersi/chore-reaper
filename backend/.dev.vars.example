@@ -1,0 +1,2 @@
+ACCESS_JWKS_URL=http://localhost:8790/jwks
+ACCESS_AUD=e2e-test-audience
