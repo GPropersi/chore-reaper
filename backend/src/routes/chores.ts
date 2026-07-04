@@ -25,7 +25,8 @@ chores.post('/', async (c) => {
   if (!hasRequiredChoreFields(body)) {
     return c.json({ success: false, error: 'Missing required fields' } satisfies ApiResponse<never>, 400);
   }
-  const data = await createChore(c.env.DB, c.var.organizationId, body as never);
+  const clientId = typeof body.clientId === 'string' ? body.clientId : undefined;
+  const data = await createChore(c.env.DB, c.var.organizationId, body as never, clientId);
   return c.json({ success: true, data } satisfies ApiResponse<typeof data>, 201);
 });
 

@@ -28,7 +28,9 @@ CREATE TABLE chores (
     frequency           INTEGER NOT NULL,
     urgency             TEXT CHECK (urgency IN ('low', 'medium', 'high')),
     long_term_task      INTEGER NOT NULL DEFAULT 0,
-    version             INTEGER NOT NULL DEFAULT 1
+    version             INTEGER NOT NULL DEFAULT 1,
+    client_id           TEXT
 );
 
 CREATE INDEX idx_chores_organization_id ON chores(organization_id);
+CREATE UNIQUE INDEX idx_chores_org_client_id ON chores(organization_id, client_id) WHERE client_id IS NOT NULL;

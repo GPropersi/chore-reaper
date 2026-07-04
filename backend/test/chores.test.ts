@@ -58,6 +58,37 @@ describe('createChore', () => {
     expect(chore.version).toBe(1);
     expect(chore.name).toBe('Vacuum');
   });
+
+  it('deduplicates a repeated clientId within the same org, returning the original row both times', async () => {
+    const first = await createChore(env.DB, ORG_A, baseChoreInput, 'client-uuid-1');
+    const second = await createChore(
+      env.DB,
+      ORG_A,
+      { ...baseChoreInput, name: 'Different Name' },
+      'client-uuid-1',
+    );
+
+    expect(second.id).toBe(first.id);
+    expect(second.name).toBe('Vacuum');
+    expect(await getAllChores(env.DB, ORG_A)).toHaveLength(1);
+  });
+
+  it('allows the same clientId to be reused across two different orgs', async () => {
+    await createChore(env.DB, ORG_A, baseChoreInput, 'shared-client-id');
+    await createChore(env.DB, ORG_B, baseChoreInput, 'shared-client-id');
+
+    expect(await getAllChores(env.DB, ORG_A)).toHaveLength(1);
+    expect(await getAllChores(env.DB, ORG_B)).toHaveLength(1);
+  });
+
+  it('creates distinct rows when clientId is omitted or differs', async () => {
+    await createChore(env.DB, ORG_A, baseChoreInput);
+    await createChore(env.DB, ORG_A, baseChoreInput);
+    await createChore(env.DB, ORG_A, baseChoreInput, 'client-uuid-2');
+    await createChore(env.DB, ORG_A, baseChoreInput, 'client-uuid-3');
+
+    expect(await getAllChores(env.DB, ORG_A)).toHaveLength(4);
+  });
 });
 
 describe('updateChore', () => {

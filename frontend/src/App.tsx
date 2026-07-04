@@ -13,6 +13,8 @@ type Me = {
   timezone: string;
 };
 
+const ME_CACHE_KEY = 'me-cache-v1';
+
 function useMe() {
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
@@ -20,7 +22,14 @@ function useMe() {
   useEffect(() => {
     fetch('/api/me')
       .then((res) => (res.ok ? (res.json() as Promise<Me>) : null))
-      .then(setMe)
+      .then((fetched) => {
+        if (fetched) localStorage.setItem(ME_CACHE_KEY, JSON.stringify(fetched));
+        setMe(fetched);
+      })
+      .catch(() => {
+        const cached = localStorage.getItem(ME_CACHE_KEY);
+        setMe(cached ? (JSON.parse(cached) as Me) : null);
+      })
       .finally(() => setLoading(false));
   }, []);
 

@@ -57,29 +57,42 @@ export async function createChore(
   db: D1Database,
   organizationId: number,
   input: ChoreInput,
+  clientId?: string,
 ): Promise<ChoreWire> {
-  const result = await db
-    .prepare(
-      `INSERT INTO chores
-        (organization_id, name, details, room, date_last_completed, duration, frequency, urgency, long_term_task, version)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-    )
-    .bind(
-      organizationId,
-      input.name,
-      input.details ?? null,
-      input.room,
-      dateLastCompletedString(input.dateLastCompleted),
-      input.duration,
-      input.frequency,
-      input.urgency ?? null,
-      input.longTermTask ? 1 : 0,
-    )
-    .run();
+  let lastRowId: number | bigint;
+  try {
+    const result = await db
+      .prepare(
+        `INSERT INTO chores
+          (organization_id, name, details, room, date_last_completed, duration, frequency, urgency, long_term_task, version, client_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+      )
+      .bind(
+        organizationId,
+        input.name,
+        input.details ?? null,
+        input.room,
+        dateLastCompletedString(input.dateLastCompleted),
+        input.duration,
+        input.frequency,
+        input.urgency ?? null,
+        input.longTermTask ? 1 : 0,
+        clientId ?? null,
+      )
+      .run();
+    lastRowId = result.meta.last_row_id;
+  } catch (err) {
+    if (!clientId || !String(err).includes('UNIQUE constraint failed')) throw err;
+    const existing = await db
+      .prepare('SELECT * FROM chores WHERE organization_id = ? AND client_id = ?')
+      .bind(organizationId, clientId)
+      .first<ChoreRow>();
+    return rowToChore(existing!);
+  }
 
   const row = await db
     .prepare('SELECT * FROM chores WHERE id = ? AND organization_id = ?')
-    .bind(result.meta.last_row_id, organizationId)
+    .bind(lastRowId, organizationId)
     .first<ChoreRow>();
   return rowToChore(row!);
 }

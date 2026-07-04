@@ -82,6 +82,30 @@ describe('POST /api/chores', () => {
     const body = (await res.json()) as { success: boolean; data: { id: number; name: string } };
     expect(body.data.name).toBe('Vacuum');
   });
+
+  it('deduplicates a repeated clientId, never creating a second row', async () => {
+    const app = testApp(ORG_A);
+    const bodyWithClientId = JSON.stringify({ ...validChoreBody, clientId: 'client-uuid-1' });
+
+    const firstRes = await app.request('/api/chores', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: bodyWithClientId,
+    });
+    const secondRes = await app.request('/api/chores', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: bodyWithClientId,
+    });
+
+    const first = ((await firstRes.json()) as { data: { id: number } }).data;
+    const second = ((await secondRes.json()) as { data: { id: number } }).data;
+    expect(second.id).toBe(first.id);
+
+    const listRes = await app.request('/api/chores');
+    const list = ((await listRes.json()) as { data: unknown[] }).data;
+    expect(list).toHaveLength(1);
+  });
 });
 
 describe('PUT /api/chores/:id', () => {

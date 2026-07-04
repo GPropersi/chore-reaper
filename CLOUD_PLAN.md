@@ -369,61 +369,115 @@ needed on the CI trigger; a normal push/PR-triggered workflow is fine.
 
 All of this phase is **[A]** — pure logic and frontend work, no Cloudflare account dependency.
 
-### 4.1 Optimistic concurrency — frontend integration (data layer already covered in 1.2/1.3)
+### 4.1 Optimistic concurrency — frontend integration, edit-chore flow only
 
-- [ ] **[A] RED**: a mutation sent with a stale `baseVersion` results in the UI surfacing a
-      distinguishable "changed elsewhere" state rather than the generic error banner
-- [ ] **[A] GREEN**: implement 409-specific handling in the mutation handlers
-- [ ] **[A] REFACTOR**: build per-mutation try/catch/rollback consistently across every handler in
-      `App.tsx`, extended for the 409 case rather than a parallel path
+Conflict handling (409) only exists on `PUT /api/chores/:id` (edit). `PATCH /api/chores/:id/complete`
+never returns 409 — `completeChore` merges via a monotonic max on `date_last_completed` and always
+succeeds (or 404s if the row is gone). `DELETE` and `POST` never version-check either. So this task is
+scoped to the edit-chore flow, and requires that flow to exist first — there is currently no edit-chore
+UI wired anywhere (`ChoreFormModal`/`ChoreForm` are seeded but unused, `ChoresView` only wires
+complete/delete).
+
+- [x] **[A]** 4.0 prerequisite: wire a minimal create-chore and edit-chore flow into `ChoresView.tsx`
+      using the already-seeded `ChoreFormModal`/`ChoreForm` and `ChoreList`'s `onEdit` prop — POST for
+      create, PUT (with `version`) for edit. Without this there is nothing that can produce a 409.
+- [x] **[A] RED**: editing a chore, then submitting a PUT whose `version` is stale (mocked 409 response)
+      results in the UI surfacing a distinguishable "changed elsewhere" state for that chore — not the
+      generic error path
+- [x] **[A] GREEN**: implement 409-specific handling in the edit handler
+- [x] **[A] REFACTOR**: build one consistent try/catch/rollback pattern across all four mutation handlers
+      in `ChoresView.tsx` (create/edit/complete/delete), with the 409 branch as one case inside that
+      shared pattern rather than a parallel path bolted onto edit alone — implemented as a shared
+      `mutate({ optimisticApply, request, onSuccess, onConflict?, onNetworkFailure? })` helper; all four
+      handlers apply their local state change immediately, then reconcile or (on network failure) simply
+      leave the optimistic state in place — `onNetworkFailure` is the seam 4.2's outbox plugs into
 
 ### 4.2 Outbox core
 
-- [ ] **[A] RED**: a mutation attempted while `navigator.onLine === false` is appended to the outbox
+- [x] **[A] RED**: a mutation attempted while `navigator.onLine === false` is appended to the outbox
       (`{id: uuid, type, choreId?, payload, baseVersion, createdAt}`) instead of firing a network request
-- [ ] **[A] RED**: the outbox is persisted to `localStorage` after every append
-- [ ] **[A] RED**: re-instantiating the outbox (simulating a page reload) reads the previously-persisted
+- [x] **[A] RED**: the outbox is persisted to `localStorage` after every append
+- [x] **[A] RED**: re-instantiating the outbox (simulating a page reload) reads the previously-persisted
       queue back
-- [ ] **[A] GREEN**: implement the outbox module (plain TS, no framework dependency — testable in
-      isolation)
-- [ ] **[A] RED**: an `online` event triggers flush, replaying queued mutations in original order
-- [ ] **[A] RED**: a successful replay removes that entry from the outbox and from `localStorage`
-- [ ] **[A] RED**: a 409 during replay drops that specific entry (with the conflict surfaced per 4.1) but
+- [x] **[A] GREEN**: implement the outbox module (plain TS, no framework dependency — testable in
+      isolation) — `frontend/src/outbox/outbox.ts` (`createOutbox(fetchImpl)`) + `useOutbox.ts` (React
+      wiring via `useSyncExternalStore`), wired into `ChoresView.tsx`'s `mutate()` `onNetworkFailure` seam
+- [x] **[A] RED**: an `online` event triggers flush, replaying queued mutations in original order
+- [x] **[A] RED**: a successful replay removes that entry from the outbox and from `localStorage`
+- [x] **[A] RED**: a 409 during replay drops that specific entry (with the conflict surfaced per 4.1) but
       continues flushing the remaining queue — one stale entry must not block everything behind it
-- [ ] **[A] GREEN**: implement flush/replay logic
-- [ ] **[A] RED**: replaying the same `create` mutation twice (simulating an ack lost after the server
-      actually applied it) does not create a duplicate row — verify the idempotency-key behavior end to
-      end against the D1 layer from 1.2
-- [ ] **[A] GREEN**: implement idempotency-key checking on the Worker's create route (reject/no-op a
-      repeat of a UUID already applied, within a bounded recent window)
+- [x] **[A] GREEN**: implement flush/replay logic — also added beyond the ground truth: a 404 on a
+      `delete` replay is treated as success (goal state "row gone" already holds) rather than retried;
+      any other error halts the flush, leaving that entry and the rest queued in order; construction with
+      `navigator.onLine === true` and a non-empty persisted queue flushes immediately rather than waiting
+      for a fresh `online` event
+- [x] **[A] RED**: replaying the same `create` mutation twice (simulating an ack lost after the server
+      actually applied it) does not create a duplicate row. Split across two layers, both green: the
+      outbox module's own test proves it sends the identical `clientId` (the entry's own uuid) on every
+      replay of the same entry; `backend/test/chores.test.ts`'s dedup tests (added in the idempotency-key
+      task below) prove the D1 layer collapses repeats of that `clientId` to one row. A true single test
+      spanning both layers via a live local D1 is deferred to 4.5's full offline e2e checkpoint
+- [x] **[A] GREEN**: implement idempotency-key checking on the Worker's create route — a nullable
+      `client_id` column on `chores` with a unique index scoped to `(organization_id, client_id)`
+      (added directly to `0001_init.sql`, not a new migration, since nothing has been deployed yet);
+      `createChore` accepts an optional `clientId`, and a repeat of a `client_id` already used in that
+      org returns the existing row instead of erroring or inserting a duplicate. This is a permanent
+      dedupe key, not a bounded recent window — simpler, and sufficient since a client-generated UUID
+      is never reused for a different logical mutation
 
 ### 4.3 IndexedDB read cache
 
-- [ ] **[A] RED**: after a successful `GET /api/chores`, the result is written to IndexedDB
-- [ ] **[A] RED**: on load, if the network fetch fails or `navigator.onLine === false`, the UI renders
+- [x] **[A] RED**: after a successful `GET /api/chores`, the result is written to IndexedDB
+- [x] **[A] RED**: on load, if the network fetch fails or `navigator.onLine === false`, the UI renders
       from the IndexedDB cache, marked as stale, instead of blocking or showing nothing
-- [ ] **[A] GREEN**: implement using `fake-indexeddb` in tests, real IndexedDB in the browser
-- [ ] **[A] REFACTOR**: confirm the "stale" banner clears automatically once a live fetch succeeds
+- [x] **[A] GREEN**: implement using `fake-indexeddb` in tests, real IndexedDB in the browser —
+      `frontend/src/cache/choresCache.ts` (hand-rolled `read`/`write`/`clear` over one object store, no
+      new dependency), `frontend/src/components/common/StatusBanner.tsx`, wired into `ChoresView.tsx`'s
+      load effect
+- [x] **[A] REFACTOR**: confirm the "stale" banner clears automatically once a live fetch succeeds —
+      the load effect also listens for the `online` event and retries, clearing staleness on success
 
 ### 4.4 Service worker / app shell caching
 
-- [ ] **[A]** Configure `vite-plugin-pwa` with a cache-first strategy for built assets
-- [ ] **[A] RED** (e2e): with the service worker registered and the app previously loaded once, a
+- [x] **[A]** Configure `vite-plugin-pwa` with a cache-first strategy for built assets — added to
+      `frontend/vite.config.ts` (`registerType: 'autoUpdate'`, `injectRegister: 'auto'`, Workbox
+      `generateSW` precaching `**/*.{js,css,html,svg,png}`); `frontend/public/pwa-192.png`/`pwa-512.png`
+      placeholder icons added so manifest generation has at least one
+- [x] **[A] RED** (e2e): with the service worker registered and the app previously loaded once, a
       Playwright context with `setOffline(true)` still successfully loads the app shell on a fresh
       navigation
-- [ ] **[A] GREEN**: confirm the generated service worker satisfies this (largely plugin-configuration,
-      not hand-written logic)
-- **[A] Verify**: a completely fresh browser profile (nothing cached yet) attempting to load while
-  offline fails gracefully with a clear message, not a blank screen
+- [x] **[A] GREEN**: confirm the generated service worker satisfies this (largely plugin-configuration,
+      not hand-written logic) — `e2e/offline-shell.spec.ts`; `npx vite build` confirmed 9 entries
+      precached and `sw.js`/`registerSW.js` generated correctly
+- [x] **[A] Verify**: a completely fresh browser profile (nothing cached yet) attempting to load while
+      offline fails gracefully with a clear message, not a blank screen — automated as the second case in
+      `e2e/offline-shell.spec.ts` rather than left purely manual: a fresh `browser.newContext({offline:
+true})` asserts `page.goto('/')` rejects outright instead of hanging or rendering nothing
 
 ### 4.5 Full offline e2e
 
-- [ ] **[A] RED**: go offline mid-session → mark a chore complete → verify optimistic UI update → go
+- [x] **[A] RED**: go offline mid-session → mark a chore complete → verify optimistic UI update → go
       back online → verify the outbox flushes and the server-confirmed state matches
-- [ ] **[A] RED**: go offline → add a new chore → reload the page while still offline → the new chore is
+- [x] **[A] RED**: go offline → add a new chore → reload the page while still offline → the new chore is
       still visible (from the outbox + IndexedDB cache, not lost on reload)
-- [ ] **[A] GREEN**: these should already pass if 4.1–4.4 are correctly implemented — this is an
-      integration checkpoint, not new logic
+- [x] **[A] GREEN**: `e2e/offline-outbox.spec.ts` — three scenarios: offline-complete-then-sync,
+      offline-add-then-reload-while-offline, and a genuine cross-layer idempotency proof (a real row is
+      created directly against the backend using the same `clientId` the outbox will retry with,
+      simulating an ack lost after the server already applied the mutation — confirms exactly one row
+      results). This surfaced two real gaps beyond "should already pass," not just an integration
+      checkpoint: - `ChoresView.tsx` never merged still-pending outbox `create` entries into the rendered list on
+      load — a reload while offline before that create ever synced would drop it, since the IndexedDB
+      cache only holds what was last successfully fetched from the server. Fixed via
+      `mergePendingCreates` in the load effect, covered first by a component-level RED/GREEN test
+      before the e2e proof. - `App.tsx`'s `useMe()` had no error handling at all on its `/api/me` fetch — a rejected fetch
+      (offline) left `loading` stuck `true` forever, so the whole authenticated app (including
+      `ChoresView`) never mounted. Fixed by caching the last-successful `/api/me` response in
+      `localStorage` and falling back to it on fetch failure, mirroring the chores cache pattern. - Also fixed along the way: `playwright.config.ts`'s frontend `webServer` used `port: 5173`
+      (TCP-listener-only readiness), which raced the `vite preview` static-file middleware's actual
+      startup often enough to be non-flaky-but-still-real; switched to `url:` so readiness waits for
+      a genuine HTTP response. These new e2e specs also mutate/create real rows against the shared
+      seeded org (global-setup only wipes once per suite run, not per file), so each test restores or
+      deletes what it touched to avoid breaking sibling spec files.
 
 ---
 
