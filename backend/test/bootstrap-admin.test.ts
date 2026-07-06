@@ -25,6 +25,13 @@ describe('bootstrapAdmin', () => {
     expect(users.results[0].role).toBe('admin');
   });
 
+  it('normalizes the admin email (trim + lowercase) before storing', async () => {
+    await bootstrapAdmin(env.DB, 'Acme Household', '  Admin@Example.com  ');
+
+    const users = await env.DB.prepare('SELECT * FROM users').all();
+    expect(users.results[0].email).toBe('admin@example.com');
+  });
+
   it('fails loudly rather than silently creating a duplicate when the org already exists', async () => {
     await bootstrapAdmin(env.DB, 'Acme Household', 'admin@example.com');
 

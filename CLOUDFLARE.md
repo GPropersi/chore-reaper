@@ -120,6 +120,14 @@ access.
 Roles (`admin` / `member`) live in the app's own `users` table and are enforced by Worker-side
 middleware after validating the Access JWT.
 
+**Email is the only link between the two systems above** — Access's allow-list and D1's `users` row
+share no ID, just an email string, so a casing mismatch between them (`Jane@Company.com` in one,
+`jane@company.com` in the other) would otherwise let someone past Access's own gate only to get a 401
+from the app. Email is normalized (trimmed + lowercased) at every point it's written or compared: the
+verified email pulled off the JWT (`accessAuth` middleware), and every `users` row insert
+(`createUser`, `bootstrap-admin.ts`) — so the match is case-insensitive by construction rather than by
+convention.
+
 ## 4. Organizations
 
 ```

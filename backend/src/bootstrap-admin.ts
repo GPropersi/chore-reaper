@@ -27,7 +27,7 @@ export async function bootstrapAdmin(
 
   const userResult = await db
     .prepare("INSERT INTO users (organization_id, email, role) VALUES (?, ?, 'admin')")
-    .bind(organizationId, adminEmail)
+    .bind(organizationId, adminEmail.trim().toLowerCase())
     .run();
 
   return { organizationId, userId: userResult.meta.last_row_id };

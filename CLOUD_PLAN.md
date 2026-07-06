@@ -83,13 +83,25 @@ Fixed decisions referenced throughout — set once here rather than re-decided p
       `ACCESS_AUD` per Conventions
 - [x] **[A] Verify**: `wrangler dev` boots `backend/` locally with the `DB` binding reachable; a placeholder
       Worker route returns 200
-- [ ] **[B]** `wrangler d1 create chore-reaper` (or equivalent); replace the placeholder `database_id` in
+- [x] **[B]** `wrangler d1 create chores4irl` (or equivalent); replace the placeholder `database_id` in
       `wrangler.toml` with the real one
-- [ ] **[B]** Create a Cloudflare Pages project pointed at `frontend/`'s build output
-- [ ] **[B]** Stand up the Zero Trust team + an Access Application for the chosen hostname
-- [ ] **[B]** Configure Access login methods: One-Time PIN as default, Google/GitHub OAuth as optional
+- [x] **[B]** Create a Cloudflare Pages project pointed at `frontend/`'s build output
+- [x] **[B]** Stand up the Zero Trust team + an Access Application for the chosen hostname — landed on the
+      account's existing `urls4irl` Zero Trust team (Cloudflare accounts get one team total), not a
+      fresh team dedicated to this project; Application created for `chores.4irl.app`
+- [x] **[B]** Configure Access login methods: One-Time PIN as default, Google/GitHub OAuth as optional
       secondary
-- [ ] **[B]** Record the real `ACCESS_JWKS_URL`/`ACCESS_AUD` for this Application (see Conventions) —
+- [x] **[B]** Set the Access Application's **Session Duration** (Zero Trust dashboard → the Application's
+      policy/session settings) — how long a user stays logged in before Access re-prompts for OTP/OAuth.
+      Deliberately not defaulted here since it's a real judgment call, not a technical constraint:
+      decided for chore-reaper as **6–12 months**, favoring convenience (low-sensitivity
+      household/team data, personal devices, and OTP's own friction was already an accepted
+      tradeoff) over a shorter re-auth window. Note this only controls how long a session lasts on
+      its own; removing someone from the allow-list does **not** retroactively kill a session they're
+      already in (JWTs are bearer tokens, valid until their own expiry) — cutting someone off before
+      natural expiry requires also revoking their active session in the Zero Trust dashboard, not just
+      removing the allow-list entry
+- [x] **[B]** Record the real `ACCESS_JWKS_URL`/`ACCESS_AUD` for this Application (see Conventions) —
       not yet wired into any environment; that happens per-task below as each piece goes live
 
 ---
@@ -215,7 +227,7 @@ already existing, and there's no self-registration to create one.
       `scripts/bootstrap-admin.ts` is a thin CLI wrapper using Wrangler's `getPlatformProxy()` to obtain a
       real `env.DB` binding outside the Workers runtime. Manually verified end-to-end against local D1: a
       fresh run creates the org+admin row, a second run with the same org name exits 1 with a clear error
-- [ ] **[B]** Run it for real against the production D1 database to create the first real org + admin —
+- [x] **[B]** Run it for real against the production D1 database to create the first real org + admin —
       the email used here must also be added to the Access policy allow-list (Phase 0 [B]'s Application)
       so that person can actually log in
 
@@ -246,9 +258,12 @@ already existing, and there's no self-registration to create one.
 
 - [ ] **[B]** Add allow-listed emails / policy for initial real users (beyond the bootstrap admin from
       1.8)
-- **[B] Verify**: manually log in via OTP and via OAuth (if enabled) against the real Application;
-  confirm the injected JWT header reaches the Worker and 1.4's middleware — now pointed at the real
-  `ACCESS_JWKS_URL`/`ACCESS_AUD` from Phase 0 — accepts it
+- **[B] Verify — done**: manually logged in via OTP against the real Application (no OAuth, per the
+  OTP-only decision); confirmed the injected JWT header reaches the Worker and 1.4's middleware. Root
+  cause of an initial 401 loop, for the record: the Access Application's path field needed to be fully
+  cleared (a lingering `/` scoped it to the exact root only, not `/api/*`), and `ACCESS_JWKS_URL` needed
+  to point at the account's actual existing Zero Trust team domain (`urls4irl.cloudflareaccess.com`), not
+  the team name typed during setup (`u4i`) which never actually took effect
 
 ---
 
@@ -335,30 +350,44 @@ needed on the CI trigger; a normal push/PR-triggered workflow is fine.
       before running, or `wrangler dev` falls back to `wrangler.toml`'s placeholder JWKS URL/audience and
       every request 401s. `actions/checkout`, `actions/setup-node`, and `actions/upload-artifact` (for the
       Playwright report on failure) are all pinned to commit SHAs
-- [ ] **[B]** Add `CLOUDFLARE_API_TOKEN` (scoped to Workers/Pages/D1 edit only, not full account access)
+- [x] **[B]** Add `CLOUDFLARE_API_TOKEN` (scoped to Workers/Pages/D1 edit only, not full account access)
       and `CLOUDFLARE_ACCOUNT_ID` as GitHub repo secrets
-- [ ] **[B]** Add `deploy-backend` and `deploy-frontend` jobs, both `needs: [test-e2e]` and gated
+- [x] **[B]** Add `deploy-backend` and `deploy-frontend` jobs, both `needs: [test-e2e]` and gated
       `if: github.event_name == 'push' && github.ref == 'refs/heads/main'` — never on `pull_request`
       events, so no PR deploys before it's merged. Use `cloudflare/wrangler-action` (Cloudflare's
-      official action) for both `wrangler deploy` and `wrangler pages deploy`
-- [ ] **[B]** Deliberately **do not** auto-apply D1 migrations in this pipeline. Bundling
+      official action, pinned to its v4.0.0 commit SHA) for both `wrangler deploy` (`deploy-backend`,
+      `workingDirectory: backend`) and `wrangler pages deploy` (`deploy-frontend`, builds via the new
+      root `build:frontend` script first, then deploys `frontend/dist` to the `chores4irl-frontend`
+      Pages project). Added a `push: branches: [main]` trigger alongside the existing `pull_request`
+      trigger, and widened `concurrency.group` to fall back to `github.ref` (was
+      `pull_request.number`-only, which is empty on a push event)
+- [x] **[B]** Deliberately **do not** auto-apply D1 migrations in this pipeline. Bundling
       `wrangler d1 migrations apply --remote` into a routine merge-triggered deploy means a bad migration
       can land silently as a side effect of an unrelated PR. Apply migrations as a separate, deliberate,
       manually-run step (by hand, or a dedicated `workflow_dispatch`-only job) before merging code that
-      depends on the new schema
-- **[B] Verify**: a merge to `main` triggers the deploy jobs; a deliberately-broken test blocks them
+      depends on the new schema — confirmed: no migration step was added to `deploy-backend`/`deploy-frontend`
+- **[B] Verify — pending**: a merge to `main` triggers the deploy jobs; a deliberately-broken test blocks
+  them. Not yet exercised — needs an actual push to `main` after this workflow change lands
 - [ ] **[B]** Consider a basic branch-protection ruleset (require the test jobs to pass before merge) —
       not required for the app to function, but cheap insurance against merging straight past a red CI run
 
 ### 3.2 Deploy & cutover
 
-- [ ] **[B]** `wrangler deploy` `backend/` to a staging environment
-- **[B] Verify**: staging `/api/chores` responds correctly through the real Access Application (not just
-  local dev)
-- [ ] **[B]** Deploy `frontend/`'s build to Cloudflare Pages, pointed at the staging Worker
-- **[B] Verify**: staging frontend loads, authenticates via Access, and renders the chore list
-- [ ] **[B]** Point custom domain / DNS at Pages + Worker routes
-- **[B] Verify**: TLS is live, public hostname resolves, Access still gates it correctly
+**Deviation from plan**: went straight to the real production domain (`chores.4irl.app`) rather than
+standing up a separate staging hostname/environment first — a deliberate scope call for a
+single-household deploy, not an oversight. `backend/wrangler.toml`'s `routes`/`vars`/`d1_databases` are
+therefore the live production config directly, with no separate `[env.staging]` block.
+
+- [x] **[B]** `wrangler deploy` `backend/` — deployed directly to production (see deviation note above)
+- **[B] Verify — done**: `chores.4irl.app/api/chores` responds correctly through the real Access
+  Application
+- [x] **[B]** Deploy `frontend/`'s build to Cloudflare Pages — `wrangler pages deploy`, project
+      `chores4irl-frontend`
+- **[B] Verify — done**: production frontend loads, authenticates via Access, and renders the chore list
+- [x] **[B]** Point custom domain / DNS at Pages + Worker routes — `chores.4irl.app` custom domain on the
+      Pages project, plus a `routes` entry in `wrangler.toml` for `chores.4irl.app/api/*`
+- **[B] Verify — done**: TLS is live, public hostname resolves, Access gates both the frontend and
+  `/api/*`
 - [ ] **[B]** Note `wrangler rollback` (Worker) and Cloudflare Pages' built-in deployment history
       (one-click rollback in the dashboard) as the safety net if a deploy passes CI but breaks something
       CI didn't catch

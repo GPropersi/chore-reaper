@@ -72,6 +72,16 @@ describe('accessAuth', () => {
     expect(body.email).toBe('admin@example.com');
   });
 
+  it('normalizes the verified email (trim + lowercase) regardless of the JWT casing/whitespace', async () => {
+    const token = await signTestJwt({ email: '  Admin@Example.com  ', aud: AUD, key: 'primary' });
+
+    const res = await requestAs(JWKS_URL_A, token);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { email: string };
+    expect(body.email).toBe('admin@example.com');
+  });
+
   it('rejects an expired token with 401', async () => {
     const token = await signTestJwt({
       email: 'admin@example.com',

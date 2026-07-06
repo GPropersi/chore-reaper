@@ -65,6 +65,38 @@ describe('POST /api/users', () => {
     expect(body.data.organizationId).toBe(1);
     expect(body.data.email).toBe('new@example.com');
   });
+
+  it('normalizes the email (trim + lowercase) when creating a user', async () => {
+    const res = await app.request(
+      '/api/users',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await authHeader('admin-a@example.com')) },
+        body: JSON.stringify({ email: '  New@Example.com  ', role: 'member' }),
+      },
+      testEnv(),
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { data: { email: string } };
+    expect(body.data.email).toBe('new@example.com');
+  });
+
+  it('lets a user authenticate regardless of email-casing differences between creation and login', async () => {
+    const createRes = await app.request(
+      '/api/users',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await authHeader('admin-a@example.com')) },
+        body: JSON.stringify({ email: 'Jane@Example.com', role: 'member' }),
+      },
+      testEnv(),
+    );
+    expect(createRes.status).toBe(201);
+
+    const meRes = await app.request('/api/me', { headers: await authHeader('JANE@EXAMPLE.com') }, testEnv());
+
+    expect(meRes.status).toBe(200);
+  });
 });
 
 describe('GET /api/users', () => {
