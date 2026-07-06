@@ -70,6 +70,55 @@ describe('AdminPanel', () => {
     });
   });
 
+  it('surfaces a warning banner when POST /api/users returns one', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        const method = init?.method ?? 'GET';
+        if (url === '/api/users' && method === 'GET') {
+          return jsonResponse({ success: true, data: initialUsers });
+        }
+        if (url === '/api/users' && method === 'POST') {
+          const body = JSON.parse(init!.body as string);
+          return jsonResponse({
+            success: true,
+            data: { id: 3, organizationId: 1, ...body },
+            warning:
+              'User created, but could not be added to the Cloudflare Access allow-list automatically.',
+          });
+        }
+        throw new Error(`Unhandled fetch: ${method} ${url}`);
+      }),
+    );
+    const user = userEvent.setup();
+    render(<AdminPanel />);
+    await screen.findByText('admin@example.com');
+
+    await user.click(screen.getByRole('button', { name: 'Add User' }));
+    await user.type(screen.getByLabelText('Email'), 'new@example.com');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(
+      await screen.findByText(
+        'User created, but could not be added to the Cloudflare Access allow-list automatically.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('renders no warning banner when POST /api/users returns none', async () => {
+    const user = userEvent.setup();
+    render(<AdminPanel />);
+    await screen.findByText('admin@example.com');
+
+    await user.click(screen.getByRole('button', { name: 'Add User' }));
+    await user.type(screen.getByLabelText('Email'), 'new@example.com');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await screen.findByText('new@example.com');
+    expect(screen.queryByTestId('status-banner')).not.toBeInTheDocument();
+  });
+
   it('flows remove-user through ConfirmDialog before calling DELETE', async () => {
     const user = userEvent.setup();
     render(<AdminPanel />);

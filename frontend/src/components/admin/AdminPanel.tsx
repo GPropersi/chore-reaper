@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import ConfirmDialog from '../common/ConfirmDialog';
+import StatusBanner from '../common/StatusBanner';
 import AddUserModal, { type AddUserInput } from './AddUserModal';
 
 export type AdminUser = {
@@ -10,12 +11,13 @@ export type AdminUser = {
   timezone: string | null;
 };
 
-type ApiResponse<T> = { success: boolean; data?: T; error?: string };
+type ApiResponse<T> = { success: boolean; data?: T; error?: string; warning?: string };
 
 export default function AdminPanel() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/users')
@@ -33,6 +35,7 @@ export default function AdminPanel() {
     if (body.success && body.data) {
       setUsers((prev) => [...prev, body.data as AdminUser]);
     }
+    setWarning(body.warning ?? null);
     setIsAddOpen(false);
   }
 
@@ -49,6 +52,7 @@ export default function AdminPanel() {
 
   return (
     <div className="p-4">
+      {warning && <StatusBanner tone="warning" message={warning} />}
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-white text-lg font-semibold">Users</h2>
         <button

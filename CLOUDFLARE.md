@@ -292,6 +292,28 @@ Two options, pick one deliberately:
   person also needs to be granted access — contact the operator"). Silently doing neither is the failure
   mode to avoid.
 
+**Went with fully self-service** (`backend/src/access-allowlist.ts`, wired into `POST /api/users`). The
+central constraint that shaped it: this account's Zero Trust team (`urls4irl.cloudflareaccess.com`) is
+shared with the sibling `urls4irl` project, and Cloudflare Access API-token permissions can't be scoped
+to a single Application — a token capable of editing this app's allow-list can, in principle, reach
+`urls4irl`'s Access Application too. Mitigated by: no new HTTP route (the grant only ever fires as a side
+effect of the existing admin-gated `POST /api/users`, so half-onboarding can't be structurally
+reintroduced); a narrowly-permissioned token (`Access: Policies Edit`, not `Access: Apps and Policies
+Edit`); read-then-append-only policy updates that fail closed on any unexpected shape; add-only, never
+remove (see below); and a periodic manual Cloudflare Audit Log review as the detective control for what
+token scoping alone can't close.
+
+**Multi-tenancy note**: `orgScope` scopes D1 writes to the admin's own organization, but the Access
+allow-list itself is Application-wide, not org-scoped — an admin of _any_ org in this app can grant
+Access-level login for the whole app, not just their own org. This is correct today (Access is a
+perimeter gate for the app, not per-org) and isn't a new escalation versus the fully-manual process this
+replaces — just worth knowing if this app ever supports many organizations.
+
+**Deliberately add-only, never remove**: removing an allow-list entry doesn't revoke already-issued
+bearer JWTs anyway (session duration here is 6–12 months, see Phase 0 above) — an automated "remove"
+would risk security theater (an admin believing access was cut off when it wasn't) on top of being able
+to lock out the household if it went wrong. Revocation stays a deliberate, manual dashboard step.
+
 ## What this replaces (vs. a conventional cloud stack)
 
 | Layer         | A conventional cloud plan                 | This plan (Cloudflare, free)                          |
