@@ -73,6 +73,26 @@ describe('ChoresView', () => {
     expect(screen.getByText('Dishes')).toBeInTheDocument();
   });
 
+  it('filters visible chores by selectedRoom and reports the distinct room list via onRoomsChange', async () => {
+    stubChoresFetch();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-07-01T12:00:00.000Z'));
+    const onRoomsChange = vi.fn();
+
+    render(
+      <ChoresView
+        organizationTimezone="Pacific/Kiritimati"
+        timezone="Pacific/Niue"
+        selectedRoom="Kitchen"
+        onRoomsChange={onRoomsChange}
+      />,
+    );
+
+    await vi.waitFor(() => expect(screen.getByText('Dishes')).toBeInTheDocument());
+    expect(screen.queryByText('Vacuum')).not.toBeInTheDocument();
+    expect(onRoomsChange).toHaveBeenCalledWith(['Kitchen', 'Living Room']);
+  });
+
   it('renders identical chore ordering and bar colors for two users in the same org with different personal timezones', async () => {
     stubChoresFetch();
     vi.useFakeTimers({ shouldAdvanceTime: true });

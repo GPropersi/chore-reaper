@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Chore } from '@customTypes/SharedTypes';
 import { useMidnightClock } from '../../hooks/useMidnightClock';
+import { useRoomFilter } from '../../hooks/useRoomFilter';
 import { orderChores } from '@utils/choreSort';
 import ChoreList from './ChoreList';
 import ChoreFormModal from '../form/ChoreFormModal';
@@ -23,6 +24,8 @@ type ChoresViewProps = {
   organizationTimezone: string;
   timezone: string;
   outbox?: Outbox;
+  selectedRoom?: string;
+  onRoomsChange?: (rooms: string[]) => void;
 };
 
 function toChorePayload(input: Omit<Chore, 'id'>): ChorePayload {
@@ -77,7 +80,13 @@ async function mutate<T>({
   }
 }
 
-export default function ChoresView({ organizationTimezone, timezone, outbox: outboxProp }: ChoresViewProps) {
+export default function ChoresView({
+  organizationTimezone,
+  timezone,
+  outbox: outboxProp,
+  selectedRoom = 'all',
+  onRoomsChange,
+}: ChoresViewProps) {
   const today = useMidnightClock(organizationTimezone);
   const [chores, setChores] = useState<ChoreWithVersion[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -210,6 +219,17 @@ export default function ChoresView({ organizationTimezone, timezone, outbox: out
 
   const editingChore = chores.find((c) => c.id === editingId);
 
+  const rooms = useMemo(() => Array.from(new Set(chores.map((c) => c.room))).sort(), [chores]);
+
+  useEffect(() => {
+    onRoomsChange?.(rooms);
+    // `onRoomsChange` is expected to be a state setter (or equally stable) from the caller —
+    // depending on it here would refire on every parent render, not just when `rooms` changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rooms]);
+
+  const visibleChores = useRoomFilter(chores, selectedRoom);
+
   return (
     <div>
       {isStale && (
@@ -228,7 +248,7 @@ export default function ChoresView({ organizationTimezone, timezone, outbox: out
         </button>
       </div>
       <ChoreList
-        chores={orderChores(chores, today)}
+        chores={orderChores(visibleChores, today)}
         day={today}
         timezone={timezone}
         isSimulating={false}
