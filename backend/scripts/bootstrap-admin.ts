@@ -8,7 +8,7 @@ if (!orgName || !adminEmail) {
   process.exit(1);
 }
 
-const { env, dispose } = await getPlatformProxy<Env>();
+const { env, dispose } = await getPlatformProxy<Env>({ environment: process.env.WRANGLER_ENV });
 
 try {
   const result = await bootstrapAdmin(env.DB, orgName, adminEmail, timezone);

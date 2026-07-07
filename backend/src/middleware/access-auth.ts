@@ -25,7 +25,7 @@ export const accessAuth = createMiddleware<AppEnv>(async (c, next) => {
     if (typeof payload.email !== 'string') {
       return c.json({ success: false, error: 'Unauthorized' }, 401);
     }
-    c.set('verifiedEmail', payload.email);
+    c.set('verifiedEmail', payload.email.trim().toLowerCase());
   } catch {
     // Any failure here — bad signature, expired token, unreachable JWKS
     // endpoint — must fail closed (reject) rather than let the request

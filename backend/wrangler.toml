@@ -3,12 +3,33 @@ main = "src/index.ts"
 compatibility_date = "2026-07-02"
 compatibility_flags = ["nodejs_compat"]
 
+routes = [
+  { pattern = "chores.4irl.app/api/*", zone_name = "4irl.app" }
+]
+
 [[d1_databases]]
 binding = "DB"
-database_name = "chore-reaper"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_name = "chores4irl"
+database_id = "b176c334-aa7f-42a8-8ac0-134f1a04d06b"
 migrations_dir = "migrations"
 
 [vars]
-ACCESS_JWKS_URL = "https://example.cloudflareaccess.com/cdn-cgi/access/certs"
-ACCESS_AUD = "placeholder-audience-tag"
+# JWKS is a public-key endpoint by design — meant to be fetched unauthenticated
+# by anyone verifying a JWT signature, so there's no benefit to secreting it.
+ACCESS_JWKS_URL = "https://urls4irl.cloudflareaccess.com/cdn-cgi/access/certs"
+
+# Everything else Cloudflare-account-specific is a secret, not a plain var —
+# ACCESS_AUD, CF_ACCOUNT_ID, ACCESS_POLICY_ID, and CLOUDFLARE_ACCESS_API_TOKEN
+# are all set via `wrangler secret put <NAME>`, never declared here. Local dev
+# supplies fixture values for all four via backend/.dev.vars (gitignored).
+
+# Only for one-off scripts (bootstrap-admin, seed-mock-chores) run with
+# WRANGLER_ENV=production, to reach the real D1 instead of the local emulated one.
+# `wrangler dev`/tests never set WRANGLER_ENV, so they stay local-only.
+[env.production]
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "chores4irl"
+database_id = "b176c334-aa7f-42a8-8ac0-134f1a04d06b"
+remote = true

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route, Outlet } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Outlet, useOutletContext, useNavigate } from 'react-router-dom';
 import NavBar from './components/nav/NavBar';
 import AdminPanel from './components/admin/AdminPanel';
 import ChoresView from './components/chore/ChoresView';
+import { apiFetch } from './utils/api';
 
 type Me = {
   id: number;
@@ -20,7 +21,7 @@ function useMe() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/me')
+    apiFetch('/api/me')
       .then((res) => (res.ok ? (res.json() as Promise<Me>) : null))
       .then((fetched) => {
         if (fetched) localStorage.setItem(ME_CACHE_KEY, JSON.stringify(fetched));
@@ -36,20 +37,43 @@ function useMe() {
   return { me, loading };
 }
 
+type LayoutContext = {
+  selectedRoom: string;
+  onRoomsChange: (rooms: string[]) => void;
+};
+
 function Layout({ isAdmin }: { isAdmin: boolean }) {
+  const [rooms, setRooms] = useState<string[]>([]);
+  const [selectedRoom, setSelectedRoom] = useState('all');
+  const navigate = useNavigate();
+
+  // Room tabs are also the only way back to Home from any other page (e.g.
+  // Admin) — there's no separate home/logo link, so selecting a room must
+  // navigate, not just update the filter state.
+  function handleSelectRoom(room: string) {
+    setSelectedRoom(room);
+    navigate('/');
+  }
+
   return (
     <div>
-      <NavBar rooms={[]} selectedRoom="all" onSelect={() => {}} isAdmin={isAdmin} />
-      <Outlet />
+      <NavBar rooms={rooms} selectedRoom={selectedRoom} onSelect={handleSelectRoom} isAdmin={isAdmin} />
+      <Outlet context={{ selectedRoom, onRoomsChange: setRooms } satisfies LayoutContext} />
     </div>
   );
 }
 
 function Home({ me }: { me: Me | null }) {
+  const { selectedRoom, onRoomsChange } = useOutletContext<LayoutContext>();
   if (!me) return null;
   return (
     <div className="p-4">
-      <ChoresView organizationTimezone={me.organizationTimezone} timezone={me.timezone} />
+      <ChoresView
+        organizationTimezone={me.organizationTimezone}
+        timezone={me.timezone}
+        selectedRoom={selectedRoom}
+        onRoomsChange={onRoomsChange}
+      />
     </div>
   );
 }

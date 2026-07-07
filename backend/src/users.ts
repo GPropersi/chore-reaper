@@ -48,7 +48,7 @@ export async function createUser(
 ): Promise<UserWire> {
   const result = await db
     .prepare('INSERT INTO users (organization_id, email, role, timezone, invited_by) VALUES (?, ?, ?, ?, ?)')
-    .bind(organizationId, input.email, input.role, input.timezone ?? null, invitedBy)
+    .bind(organizationId, input.email.trim().toLowerCase(), input.role, input.timezone ?? null, invitedBy)
     .run();
 
   const row = await db

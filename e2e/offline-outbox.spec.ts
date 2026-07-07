@@ -78,7 +78,11 @@ test('completing a chore while offline updates the UI immediately and syncs once
   await restoreVacuum(request, token);
 });
 
-test('adding a chore while offline survives a reload while still offline', async ({ page, context }) => {
+test('adding a chore while offline survives a reload while still offline', async ({
+  page,
+  context,
+  request,
+}) => {
   const token = await signE2eJwt('member-e2e@example.com');
   await page.setExtraHTTPHeaders({ 'Cf-Access-Jwt-Assertion': token });
   await page.goto('/');
@@ -100,6 +104,12 @@ test('adding a chore while offline survives a reload while still offline', async
   await page.reload();
 
   await expect(page.getByText('Mop Floors')).toBeVisible();
+
+  await context.setOffline(false);
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await expect.poll(() => pendingOutboxCount(page), { timeout: 10_000 }).toBe(0);
+
+  await deleteChoreByName(request, token, 'Mop Floors');
 });
 
 test('a create mutation whose ack is lost over the network is not duplicated once retried', async ({

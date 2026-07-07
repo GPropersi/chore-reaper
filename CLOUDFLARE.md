@@ -120,6 +120,14 @@ access.
 Roles (`admin` / `member`) live in the app's own `users` table and are enforced by Worker-side
 middleware after validating the Access JWT.
 
+**Email is the only link between the two systems above** — Access's allow-list and D1's `users` row
+share no ID, just an email string, so a casing mismatch between them (`Jane@Company.com` in one,
+`jane@company.com` in the other) would otherwise let someone past Access's own gate only to get a 401
+from the app. Email is normalized (trimmed + lowercased) at every point it's written or compared: the
+verified email pulled off the JWT (`accessAuth` middleware), and every `users` row insert
+(`createUser`, `bootstrap-admin.ts`) — so the match is case-insensitive by construction rather than by
+convention.
+
 ## 4. Organizations
 
 ```
@@ -283,6 +291,40 @@ Two options, pick one deliberately:
 - **Stay manual**: keep Access provisioning a dashboard step, but say so explicitly in the UI ("this
   person also needs to be granted access — contact the operator"). Silently doing neither is the failure
   mode to avoid.
+
+**Went with fully self-service** (`backend/src/access-allowlist.ts`, wired into `POST /api/users`). The
+central constraint that shaped it: this account's Zero Trust team (`urls4irl.cloudflareaccess.com`) is
+shared with the sibling `urls4irl` project, and Cloudflare Access API-token permissions can't be scoped
+to a single Application — a token capable of editing this app's allow-list can, in principle, reach
+`urls4irl`'s Access Application too. Mitigated by: no new HTTP route (the grant only ever fires as a side
+effect of the existing admin-gated `POST /api/users`, so half-onboarding can't be structurally
+reintroduced); a narrowly-permissioned token (`Access: Policies Edit`, not `Access: Apps and Policies
+Edit`); read-then-append-only policy updates that fail closed on any unexpected shape; add-only, never
+remove (see below); and a periodic manual Cloudflare Audit Log review as the detective control for what
+token scoping alone can't close.
+
+**Multi-tenancy note**: `orgScope` scopes D1 writes to the admin's own organization, but the Access
+allow-list itself is Application-wide, not org-scoped — an admin of _any_ org in this app can grant
+Access-level login for the whole app, not just their own org. This is correct today (Access is a
+perimeter gate for the app, not per-org) and isn't a new escalation versus the fully-manual process this
+replaces — just worth knowing if this app ever supports many organizations.
+
+**Verified live in production** (2026-07-07): the policy targeted is a _reusable_ Cloudflare Access
+policy (`"reusable": true`), which must be edited via the standalone
+`/accounts/{account_id}/access/policies/{policy_id}` endpoint — the app-nested
+`/access/apps/{app_id}/policies/{policy_id}` path can read a reusable policy but isn't the documented way
+to write to one. `ACCESS_APP_ID` turned out to be unnecessary for this reason and was dropped entirely.
+`ACCESS_AUD`, `CF_ACCOUNT_ID`, and `ACCESS_POLICY_ID` are all set as Worker secrets
+(`wrangler secret put`), not `wrangler.toml` vars — nothing Cloudflare-account-specific is committed to
+this public repo. The Access Application was rebuilt from scratch during this rollout (fresh audience
+tag, hostname/login-method/session-duration reconfigured, the existing reusable allow-list policy
+re-attached), since the original `ACCESS_AUD` had already been committed to git history earlier in
+development. Live end-to-end grant confirmed working against the real Cloudflare API.
+
+**Deliberately add-only, never remove**: removing an allow-list entry doesn't revoke already-issued
+bearer JWTs anyway (session duration here is 6–12 months, see Phase 0 above) — an automated "remove"
+would risk security theater (an admin believing access was cut off when it wasn't) on top of being able
+to lock out the household if it went wrong. Revocation stays a deliberate, manual dashboard step.
 
 ## What this replaces (vs. a conventional cloud stack)
 
