@@ -139,13 +139,25 @@ describe('orgScope', () => {
       expect((await resOrg2.json()) as { organizationId: number }).toMatchObject({ organizationId: 2 });
     });
 
-    it('returns 400 (not a silent default) when multiple memberships exist and no header is given', async () => {
+    it('resolves to the lowest-id membership (not a hard error) when multiple exist and no header is given', async () => {
       await seedOrgsAndUsers();
       await seedAdditionalMembership(1, 2, 'member');
 
       const res = await appWithStubEmail('admin-a@example.com').request('/whoami', {}, env);
 
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ organizationId: 1, role: 'admin' });
+    });
+
+    it('resolving without a header is consistent every time — never alternates between memberships', async () => {
+      await seedOrgsAndUsers();
+      await seedAdditionalMembership(1, 2, 'member');
+
+      const first = await appWithStubEmail('admin-a@example.com').request('/whoami', {}, env);
+      const second = await appWithStubEmail('admin-a@example.com').request('/whoami', {}, env);
+
+      expect((await first.json()) as { organizationId: number }).toMatchObject({ organizationId: 1 });
+      expect((await second.json()) as { organizationId: number }).toMatchObject({ organizationId: 1 });
     });
 
     it('returns 403 when X-Org-Id names a real org the user is not a member of', async () => {
