@@ -74,10 +74,10 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('POST /api/users', () => {
+describe('POST /api/members', () => {
   it('returns 403 for a non-admin', async () => {
     const res = await app.request(
-      '/api/users',
+      '/api/members',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(await authHeader('member-a@example.com')) },
@@ -88,9 +88,9 @@ describe('POST /api/users', () => {
     expect(res.status).toBe(403);
   });
 
-  it('creates a user scoped to the admin own org, ignoring a different organizationId in the body', async () => {
+  it('creates a member scoped to the admin own org, ignoring a different organizationId in the body', async () => {
     const res = await app.request(
-      '/api/users',
+      '/api/members',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(await authHeader('admin-a@example.com')) },
@@ -104,9 +104,9 @@ describe('POST /api/users', () => {
     expect(body.data.email).toBe('new@example.com');
   });
 
-  it('normalizes the email (trim + lowercase) when creating a user', async () => {
+  it('normalizes the email (trim + lowercase) when creating a member', async () => {
     const res = await app.request(
-      '/api/users',
+      '/api/members',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(await authHeader('admin-a@example.com')) },
@@ -119,9 +119,9 @@ describe('POST /api/users', () => {
     expect(body.data.email).toBe('new@example.com');
   });
 
-  it('lets a user authenticate regardless of email-casing differences between creation and login', async () => {
+  it('lets a member authenticate regardless of email-casing differences between creation and login', async () => {
     const createRes = await app.request(
-      '/api/users',
+      '/api/members',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(await authHeader('admin-a@example.com')) },
@@ -136,11 +136,11 @@ describe('POST /api/users', () => {
     expect(meRes.status).toBe(200);
   });
 
-  it('adding an email that already belongs to another org creates only a new membership, not a duplicate user', async () => {
+  it('adding an email that already belongs to another org creates only a new membership, not a duplicate account', async () => {
     // admin-b@example.com already has a users row (org 2) from beforeEach —
     // adding them to org 1 must not touch/duplicate that row.
     const res = await app.request(
-      '/api/users',
+      '/api/members',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(await authHeader('admin-a@example.com')) },
@@ -168,7 +168,7 @@ describe('POST /api/users', () => {
 
   it('returns 409 when the email is already a member of the current org', async () => {
     const res = await app.request(
-      '/api/users',
+      '/api/members',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(await authHeader('admin-a@example.com')) },
@@ -182,7 +182,7 @@ describe('POST /api/users', () => {
   it('grants Cloudflare Access on creation and returns no warning when the grant succeeds', async () => {
     const fetchMock = stubJwksAndPolicy([]);
     const res = await app.request(
-      '/api/users',
+      '/api/members',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(await authHeader('admin-a@example.com')) },
@@ -208,7 +208,7 @@ describe('POST /api/users', () => {
   it('returns no warning when the email is already on the Access allow-list (idempotent grant)', async () => {
     const fetchMock = stubJwksAndPolicy([{ email: { email: 'new@example.com' } }]);
     const res = await app.request(
-      '/api/users',
+      '/api/members',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(await authHeader('admin-a@example.com')) },
@@ -227,12 +227,12 @@ describe('POST /api/users', () => {
     expect(calls[0][1]?.method).toBeUndefined(); // GET, not PUT
   });
 
-  it('still creates the user and returns 201 with a warning when the Access grant fails', async () => {
+  it('still creates the member and returns 201 with a warning when the Access grant fails', async () => {
     // stubAccessJwks() (from beforeEach) 404s any URL other than the JWKS
     // endpoint, so the policy GET this route triggers fails naturally here —
     // no extra stubbing needed to exercise the degraded path.
     const res = await app.request(
-      '/api/users',
+      '/api/members',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(await authHeader('admin-a@example.com')) },
@@ -246,9 +246,9 @@ describe('POST /api/users', () => {
     expect(body.warning).toContain('gracefail@example.com');
 
     // The D1 row itself must exist regardless of the Access-API failure —
-    // the user is never left uncreated over a Cloudflare API problem.
+    // the member is never left uncreated over a Cloudflare API problem.
     const listRes = await app.request(
-      '/api/users',
+      '/api/members',
       { headers: await authHeader('admin-a@example.com') },
       { ...testEnv(), ...ACCESS_ALLOWLIST_ENV },
     );
@@ -257,10 +257,10 @@ describe('POST /api/users', () => {
   });
 });
 
-describe('GET /api/users', () => {
-  it('lists only same-org users for an admin', async () => {
+describe('GET /api/members', () => {
+  it('lists only same-org members for an admin', async () => {
     const res = await app.request(
-      '/api/users',
+      '/api/members',
       { headers: await authHeader('admin-a@example.com') },
       testEnv(),
     );
@@ -271,33 +271,33 @@ describe('GET /api/users', () => {
   });
 });
 
-describe('DELETE /api/users/:id', () => {
-  it('cannot target a user in a different org (404)', async () => {
+describe('DELETE /api/members/:id', () => {
+  it('cannot target a member in a different org (404)', async () => {
     const res = await app.request(
-      '/api/users/2',
+      '/api/members/2',
       { method: 'DELETE', headers: await authHeader('admin-a@example.com') },
       testEnv(),
     );
     expect(res.status).toBe(404);
   });
 
-  it('deletes a same-org user', async () => {
+  it('deletes a same-org member', async () => {
     const res = await app.request(
-      '/api/users/3',
+      '/api/members/3',
       { method: 'DELETE', headers: await authHeader('admin-a@example.com') },
       testEnv(),
     );
     expect(res.status).toBe(200);
   });
 
-  it('removing a user from one org does not affect their membership in another', async () => {
+  it('removing a member from one org does not affect their membership in another', async () => {
     // Give admin-b (org 2 only, from beforeEach) a second membership in org 1.
     await env.DB.prepare('INSERT INTO org_members (user_id, organization_id, role) VALUES (2, 1, ?)')
       .bind('member')
       .run();
 
     const res = await app.request(
-      '/api/users/2',
+      '/api/members/2',
       { method: 'DELETE', headers: await authHeader('admin-a@example.com') },
       testEnv(),
     );

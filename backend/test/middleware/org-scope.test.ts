@@ -259,12 +259,12 @@ describe('cross-org access through the full app', () => {
   });
 });
 
-describe('requireAdmin on /api/users/*', () => {
+describe('requireAdmin on /api/members/*', () => {
   it('returns 403 for a non-admin user', async () => {
     await seedOrgsAndUsers();
 
     const res = await app.request(
-      '/api/users',
+      '/api/members',
       { headers: await authHeader('member-a@example.com') },
       testEnv(),
     );

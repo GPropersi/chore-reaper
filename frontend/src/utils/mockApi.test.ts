@@ -134,34 +134,34 @@ describe('mockFetch: /api/chores', () => {
   });
 });
 
-describe('mockFetch: /api/users', () => {
+describe('mockFetch: /api/members', () => {
   it('GET returns a non-empty seeded list', async () => {
-    const res = await mockFetch('/api/users');
+    const res = await mockFetch('/api/members');
     const body = await json<{ success: boolean; data: unknown[] }>(res);
     expect(body.success).toBe(true);
     expect(body.data.length).toBeGreaterThan(0);
   });
 
-  it('POST creates a user and it appears in a subsequent GET', async () => {
-    const createRes = await mockFetch('/api/users', {
+  it('POST creates a member and it appears in a subsequent GET', async () => {
+    const createRes = await mockFetch('/api/members', {
       method: 'POST',
       body: JSON.stringify({ email: 'preview@example.com', role: 'member' }),
     });
     expect(createRes.status).toBe(201);
 
-    const listRes = await mockFetch('/api/users');
+    const listRes = await mockFetch('/api/members');
     const list = await json<{ data: { email: string }[] }>(listRes);
-    expect(list.data.map((u) => u.email)).toContain('preview@example.com');
+    expect(list.data.map((m) => m.email)).toContain('preview@example.com');
   });
 
-  it('DELETE removes a user', async () => {
-    const before = await json<{ data: { id: number }[] }>(await mockFetch('/api/users'));
+  it('DELETE removes a member', async () => {
+    const before = await json<{ data: { id: number }[] }>(await mockFetch('/api/members'));
     const target = before.data[0];
 
-    await mockFetch(`/api/users/${target.id}`, { method: 'DELETE' });
+    await mockFetch(`/api/members/${target.id}`, { method: 'DELETE' });
 
-    const after = await json<{ data: { id: number }[] }>(await mockFetch('/api/users'));
-    expect(after.data.map((u) => u.id)).not.toContain(target.id);
+    const after = await json<{ data: { id: number }[] }>(await mockFetch('/api/members'));
+    expect(after.data.map((m) => m.id)).not.toContain(target.id);
   });
 });
 

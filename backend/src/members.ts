@@ -1,4 +1,4 @@
-export type UserWire = {
+export type MemberWire = {
   id: number;
   organizationId: number;
   email: string;
@@ -6,7 +6,7 @@ export type UserWire = {
   timezone: string | null;
 };
 
-export type UserInput = {
+export type MemberInput = {
   email: string;
   role: 'admin' | 'member';
   timezone?: string | null;
@@ -20,7 +20,7 @@ type MembershipListRow = {
   timezone: string | null;
 };
 
-export async function getUsersByOrg(db: D1Database, organizationId: number): Promise<UserWire[]> {
+export async function getMembersByOrg(db: D1Database, organizationId: number): Promise<MemberWire[]> {
   const result = await db
     .prepare(
       `SELECT u.id AS id, om.organization_id AS organization_id, u.email AS email,
@@ -42,14 +42,14 @@ export async function getUsersByOrg(db: D1Database, organizationId: number): Pro
 }
 
 export type AddOrgMemberResult =
-  | { status: 'created'; user: UserWire }
-  | { status: 'added_existing'; user: UserWire }
+  | { status: 'created'; member: MemberWire }
+  | { status: 'added_existing'; member: MemberWire }
   | { status: 'already_member' };
 
 export async function addOrgMember(
   db: D1Database,
   organizationId: number,
-  input: UserInput,
+  input: MemberInput,
   invitedBy: number,
 ): Promise<AddOrgMemberResult> {
   const email = input.email.trim().toLowerCase();
@@ -75,7 +75,7 @@ export async function addOrgMember(
 
     return {
       status: 'added_existing',
-      user: {
+      member: {
         id: existing.id,
         organizationId,
         email: existing.email,
@@ -108,7 +108,7 @@ export async function addOrgMember(
 
   return {
     status: 'created',
-    user: { id: row!.id, organizationId, email: row!.email, role: input.role, timezone: row!.timezone },
+    member: { id: row!.id, organizationId, email: row!.email, role: input.role, timezone: row!.timezone },
   };
 }
 

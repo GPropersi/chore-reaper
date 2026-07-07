@@ -2,12 +2,12 @@ import { useEffect, useState } from 'react';
 import type { Room } from '@customTypes/SharedTypes';
 import ConfirmDialog from '../common/ConfirmDialog';
 import StatusBanner from '../common/StatusBanner';
-import AddUserModal, { type AddUserInput } from './AddUserModal';
+import AddMemberModal, { type AddMemberInput } from './AddMemberModal';
 import RoomsSection from './RoomsSection';
 import OrganizationSection from './OrganizationSection';
 import { apiFetch } from '../../utils/api';
 
-export type AdminUser = {
+export type Member = {
   id: number;
   organizationId: number;
   email: string;
@@ -32,42 +32,42 @@ export default function AdminPanel({
   organizationTimezone,
   onOrgTimezoneChange,
 }: AdminPanelProps) {
-  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
 
   useEffect(() => {
-    apiFetch('/api/users')
+    apiFetch('/api/members')
       .then((res) => res.json())
-      .then((body: ApiResponse<AdminUser[]>) => setUsers(body.data ?? []));
+      .then((body: ApiResponse<Member[]>) => setMembers(body.data ?? []));
   }, []);
 
-  async function handleAddUser(input: AddUserInput) {
-    const res = await apiFetch('/api/users', {
+  async function handleAddMember(input: AddMemberInput) {
+    const res = await apiFetch('/api/members', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
     });
-    const body = (await res.json()) as ApiResponse<AdminUser>;
+    const body = (await res.json()) as ApiResponse<Member>;
     if (body.success && body.data) {
-      setUsers((prev) => [...prev, body.data as AdminUser]);
+      setMembers((prev) => [...prev, body.data as Member]);
       setWarning(body.warning ?? null);
       setIsAddOpen(false);
     } else {
       // Keep the modal open on failure (e.g. already a member of this org)
       // so the admin can see what went wrong and correct the email/role.
-      setWarning(body.error ?? 'Could not add user');
+      setWarning(body.error ?? 'Could not add member');
     }
   }
 
   async function handleConfirmDelete() {
     const id = pendingDeleteId;
     if (id == null) return;
-    const res = await apiFetch(`/api/users/${id}`, { method: 'DELETE' });
+    const res = await apiFetch(`/api/members/${id}`, { method: 'DELETE' });
     const body = (await res.json()) as ApiResponse<null>;
     if (body.success) {
-      setUsers((prev) => prev.filter((user) => user.id !== id));
+      setMembers((prev) => prev.filter((member) => member.id !== id));
     }
     setPendingDeleteId(null);
   }
@@ -85,29 +85,29 @@ export default function AdminPanel({
       <RoomsSection rooms={rooms} onRoomsChange={onRoomsChange} />
 
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-white text-lg font-semibold">Users</h2>
+        <h2 className="text-white text-lg font-semibold">Members</h2>
         <button
           type="button"
           onClick={() => setIsAddOpen(true)}
           className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 px-4 rounded-lg"
         >
-          Add User
+          Add Member
         </button>
       </div>
 
-      <ul className="space-y-2" data-testid="user-list">
-        {users.map((user) => (
-          <li key={user.id} className="flex justify-between items-center bg-gray-800 rounded-lg px-4 py-2">
+      <ul className="space-y-2" data-testid="member-list">
+        {members.map((member) => (
+          <li key={member.id} className="flex justify-between items-center bg-gray-800 rounded-lg px-4 py-2">
             <div>
-              <p className="text-white text-sm">{user.email}</p>
+              <p className="text-white text-sm">{member.email}</p>
               <p className="text-gray-400 text-xs">
-                {user.role}
-                {user.timezone ? ` · ${user.timezone}` : ''}
+                {member.role}
+                {member.timezone ? ` · ${member.timezone}` : ''}
               </p>
             </div>
             <button
               type="button"
-              onClick={() => setPendingDeleteId(user.id)}
+              onClick={() => setPendingDeleteId(member.id)}
               className="text-red-400 hover:text-red-300 text-sm"
             >
               Remove
@@ -116,11 +116,11 @@ export default function AdminPanel({
         ))}
       </ul>
 
-      {isAddOpen && <AddUserModal onSubmit={handleAddUser} onCancel={() => setIsAddOpen(false)} />}
+      {isAddOpen && <AddMemberModal onSubmit={handleAddMember} onCancel={() => setIsAddOpen(false)} />}
 
       {pendingDeleteId != null && (
         <ConfirmDialog
-          message="Remove this user?"
+          message="Remove this member?"
           onConfirm={handleConfirmDelete}
           onCancel={() => setPendingDeleteId(null)}
         />

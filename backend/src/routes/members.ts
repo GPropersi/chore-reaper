@@ -1,17 +1,17 @@
 import { Hono } from 'hono';
 import type { ApiResponse } from '../../../types/SharedTypes.js';
-import { getUsersByOrg, addOrgMember, removeOrgMember } from '../users.js';
+import { getMembersByOrg, addOrgMember, removeOrgMember } from '../members.js';
 import { grantAccessListEntry } from '../access-allowlist.js';
 import type { AppEnv } from '../types.js';
 
-const users = new Hono<AppEnv>();
+const members = new Hono<AppEnv>();
 
-users.get('/', async (c) => {
-  const data = await getUsersByOrg(c.env.DB, c.var.organizationId);
+members.get('/', async (c) => {
+  const data = await getMembersByOrg(c.env.DB, c.var.organizationId);
   return c.json({ success: true, data } satisfies ApiResponse<typeof data>);
 });
 
-users.post('/', async (c) => {
+members.post('/', async (c) => {
   const body = await c.req.json<Record<string, unknown>>();
   if (!body.email || (body.role !== 'admin' && body.role !== 'member')) {
     return c.json({ success: false, error: 'Missing required fields' } satisfies ApiResponse<never>, 400);
@@ -36,19 +36,19 @@ users.post('/', async (c) => {
     );
   }
 
-  const data = result.user;
+  const data = result.member;
 
   // The D1 write above is authoritative and is never rolled back over an
   // Access-API problem — a failed auto-grant just degrades to the same
   // manual fallback ("add them in the dashboard") that existed before this
-  // feature, which is better than failing user-creation over a transient
+  // feature, which is better than failing member-creation over a transient
   // Cloudflare API hiccup. This function is designed to never throw, but the
   // try/catch is defense-in-depth so a bug in it can never fail this request.
   let warning: string | undefined;
   try {
     const grant = await grantAccessListEntry(c.env, data.email);
     if (grant.status === 'failed') {
-      warning = `User added, but could not be added to the Cloudflare Access allow-list automatically (${grant.reason}). Add ${data.email} manually in the Zero Trust dashboard.`;
+      warning = `Member added, but could not be added to the Cloudflare Access allow-list automatically (${grant.reason}). Add ${data.email} manually in the Zero Trust dashboard.`;
     }
     console.log(
       JSON.stringify({
@@ -60,7 +60,7 @@ users.post('/', async (c) => {
       }),
     );
   } catch (err) {
-    warning = `User added, but could not be added to the Cloudflare Access allow-list automatically. Add ${data.email} manually in the Zero Trust dashboard.`;
+    warning = `Member added, but could not be added to the Cloudflare Access allow-list automatically. Add ${data.email} manually in the Zero Trust dashboard.`;
     console.log(JSON.stringify({ event: 'access-grant-threw', email: data.email, error: String(err) }));
   }
 
@@ -70,16 +70,16 @@ users.post('/', async (c) => {
   );
 });
 
-users.delete('/:id', async (c) => {
+members.delete('/:id', async (c) => {
   const id = Number(c.req.param('id'));
   if (Number.isNaN(id)) {
     return c.json({ success: false, error: 'Invalid id' } satisfies ApiResponse<never>, 400);
   }
   const removed = await removeOrgMember(c.env.DB, c.var.organizationId, id);
   if (!removed) {
-    return c.json({ success: false, error: 'User not found' } satisfies ApiResponse<never>, 404);
+    return c.json({ success: false, error: 'Member not found' } satisfies ApiResponse<never>, 404);
   }
   return c.json({ success: true, data: null } satisfies ApiResponse<null>);
 });
 
-export default users;
+export default members;

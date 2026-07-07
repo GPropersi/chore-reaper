@@ -174,7 +174,7 @@ describe('App', () => {
             ],
           });
         }
-        if (url === '/api/users') return jsonResponse({ success: true, data: [] });
+        if (url === '/api/members') return jsonResponse({ success: true, data: [] });
         if (url === '/api/rooms') return jsonResponse(roomsResponse);
         throw new Error(`Unhandled fetch: ${url}`);
       }),
@@ -184,13 +184,13 @@ describe('App', () => {
 
     await screen.findByText('Vacuum');
     await user.click(screen.getByTestId('admin-nav-link'));
-    await screen.findByRole('heading', { name: 'Users' });
+    await screen.findByRole('heading', { name: 'Members' });
     expect(screen.queryByText('Vacuum')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'All' }));
 
     expect(await screen.findByText('Vacuum')).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Users' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Members' })).not.toBeInTheDocument();
   });
 
   describe('multi-org membership', () => {

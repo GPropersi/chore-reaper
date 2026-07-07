@@ -9,7 +9,7 @@ function jsonResponse(body: unknown) {
   );
 }
 
-const initialUsers = [
+const initialMembers = [
   { id: 1, organizationId: 1, email: 'admin@example.com', role: 'admin', timezone: 'America/Chicago' },
   { id: 2, organizationId: 1, email: 'member@example.com', role: 'member', timezone: null },
 ];
@@ -29,14 +29,14 @@ beforeEach(() => {
       const url = typeof input === 'string' ? input : input.toString();
       const method = init?.method ?? 'GET';
 
-      if (url === '/api/users' && method === 'GET') {
-        return jsonResponse({ success: true, data: initialUsers });
+      if (url === '/api/members' && method === 'GET') {
+        return jsonResponse({ success: true, data: initialMembers });
       }
-      if (url === '/api/users' && method === 'POST') {
+      if (url === '/api/members' && method === 'POST') {
         const body = JSON.parse(init!.body as string);
         return jsonResponse({ success: true, data: { id: 3, organizationId: 1, ...body } });
       }
-      if (url.startsWith('/api/users/') && method === 'DELETE') {
+      if (url.startsWith('/api/members/') && method === 'DELETE') {
         return jsonResponse({ success: true, data: null });
       }
       throw new Error(`Unhandled fetch: ${method} ${url}`);
@@ -49,20 +49,20 @@ afterEach(() => {
 });
 
 describe('AdminPanel', () => {
-  it('renders the fetched user list', async () => {
+  it('renders the fetched member list', async () => {
     render(<AdminPanel {...noRoomsProps} />);
 
     expect(await screen.findByText('admin@example.com')).toBeInTheDocument();
     expect(screen.getByText('member@example.com')).toBeInTheDocument();
   });
 
-  it('submits the add-user form to POST /api/users and appends the result to the list', async () => {
+  it('submits the add-member form to POST /api/members and appends the result to the list', async () => {
     const user = userEvent.setup();
     render(<AdminPanel {...noRoomsProps} />);
     await screen.findByText('admin@example.com');
 
-    await user.click(screen.getByRole('button', { name: 'Add User' }));
-    const modal = screen.getByTestId('add-user-modal-backdrop');
+    await user.click(screen.getByRole('button', { name: 'Add Member' }));
+    const modal = screen.getByTestId('add-member-modal-backdrop');
     await user.type(within(modal).getByLabelText('Email'), 'new@example.com');
     await user.selectOptions(within(modal).getByLabelText('Role'), 'admin');
     await user.selectOptions(within(modal).getByLabelText('Timezone'), 'America/New_York');
@@ -79,22 +79,22 @@ describe('AdminPanel', () => {
     });
   });
 
-  it('surfaces a warning banner when POST /api/users returns one', async () => {
+  it('surfaces a warning banner when POST /api/members returns one', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
         const url = typeof input === 'string' ? input : input.toString();
         const method = init?.method ?? 'GET';
-        if (url === '/api/users' && method === 'GET') {
-          return jsonResponse({ success: true, data: initialUsers });
+        if (url === '/api/members' && method === 'GET') {
+          return jsonResponse({ success: true, data: initialMembers });
         }
-        if (url === '/api/users' && method === 'POST') {
+        if (url === '/api/members' && method === 'POST') {
           const body = JSON.parse(init!.body as string);
           return jsonResponse({
             success: true,
             data: { id: 3, organizationId: 1, ...body },
             warning:
-              'User created, but could not be added to the Cloudflare Access allow-list automatically.',
+              'Member added, but could not be added to the Cloudflare Access allow-list automatically.',
           });
         }
         throw new Error(`Unhandled fetch: ${method} ${url}`);
@@ -104,25 +104,25 @@ describe('AdminPanel', () => {
     render(<AdminPanel {...noRoomsProps} />);
     await screen.findByText('admin@example.com');
 
-    await user.click(screen.getByRole('button', { name: 'Add User' }));
-    const modal = screen.getByTestId('add-user-modal-backdrop');
+    await user.click(screen.getByRole('button', { name: 'Add Member' }));
+    const modal = screen.getByTestId('add-member-modal-backdrop');
     await user.type(within(modal).getByLabelText('Email'), 'new@example.com');
     await user.click(within(modal).getByRole('button', { name: 'Save' }));
 
     expect(
       await screen.findByText(
-        'User created, but could not be added to the Cloudflare Access allow-list automatically.',
+        'Member added, but could not be added to the Cloudflare Access allow-list automatically.',
       ),
     ).toBeInTheDocument();
   });
 
-  it('renders no warning banner when POST /api/users returns none', async () => {
+  it('renders no warning banner when POST /api/members returns none', async () => {
     const user = userEvent.setup();
     render(<AdminPanel {...noRoomsProps} />);
     await screen.findByText('admin@example.com');
 
-    await user.click(screen.getByRole('button', { name: 'Add User' }));
-    const modal = screen.getByTestId('add-user-modal-backdrop');
+    await user.click(screen.getByRole('button', { name: 'Add Member' }));
+    const modal = screen.getByTestId('add-member-modal-backdrop');
     await user.type(within(modal).getByLabelText('Email'), 'new@example.com');
     await user.click(within(modal).getByRole('button', { name: 'Save' }));
 
@@ -130,7 +130,7 @@ describe('AdminPanel', () => {
     expect(screen.queryByTestId('status-banner')).not.toBeInTheDocument();
   });
 
-  it('flows remove-user through ConfirmDialog before calling DELETE', async () => {
+  it('flows remove-member through ConfirmDialog before calling DELETE', async () => {
     const user = userEvent.setup();
     render(<AdminPanel {...noRoomsProps} />);
     await screen.findByText('admin@example.com');

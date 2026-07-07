@@ -3,18 +3,18 @@ import { useState } from 'react';
 import FormField from '../form/FormField';
 import TimezoneSelect from '../form/TimezoneSelect';
 
-export type AddUserInput = {
+export type AddMemberInput = {
   email: string;
   role: 'admin' | 'member';
   timezone: string;
 };
 
-type AddUserModalProps = {
-  onSubmit: (input: AddUserInput) => void;
+type AddMemberModalProps = {
+  onSubmit: (input: AddMemberInput) => void;
   onCancel: () => void;
 };
 
-export default function AddUserModal({ onSubmit, onCancel }: AddUserModalProps) {
+export default function AddMemberModal({ onSubmit, onCancel }: AddMemberModalProps) {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<'admin' | 'member'>('member');
   const [timezone, setTimezone] = useState('');
@@ -34,10 +34,10 @@ export default function AddUserModal({ onSubmit, onCancel }: AddUserModalProps) 
     <div
       className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start justify-center z-50 px-4 pt-4"
       onClick={handleBackdropClick}
-      data-testid="add-user-modal-backdrop"
+      data-testid="add-member-modal-backdrop"
     >
       <div className="bg-gray-800 rounded-xl p-6 w-full max-w-md overflow-y-auto max-h-[90dvh]">
-        <h3 className="text-white font-semibold text-lg mb-4">Add User</h3>
+        <h3 className="text-white font-semibold text-lg mb-4">Add Member</h3>
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <FormField
             name="email"
