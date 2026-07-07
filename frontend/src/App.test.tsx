@@ -134,4 +134,45 @@ describe('App', () => {
     expect(screen.getByText('Dishes')).toBeInTheDocument();
     expect(screen.queryByText('Vacuum')).not.toBeInTheDocument();
   });
+
+  it('navigates back to Home when a room tab is clicked while on the Admin page', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        if (url === '/api/me') return jsonResponse({ ...meResponse, role: 'admin' });
+        if (url === '/api/chores') {
+          return jsonResponse({
+            success: true,
+            data: [
+              {
+                id: 1,
+                name: 'Vacuum',
+                room: 'Living Room',
+                dateLastCompleted: '2026-06-01T00:00:00.000Z',
+                duration: 20,
+                frequency: 7,
+                version: 1,
+              },
+            ],
+          });
+        }
+        if (url === '/api/users') return jsonResponse({ success: true, data: [] });
+        throw new Error(`Unhandled fetch: ${url}`);
+      }),
+    );
+
+    render(<App />);
+
+    await screen.findByText('Vacuum');
+    await user.click(screen.getByTestId('admin-nav-link'));
+    await screen.findByRole('heading', { name: 'Users' });
+    expect(screen.queryByText('Vacuum')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'All' }));
+
+    expect(await screen.findByText('Vacuum')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Users' })).not.toBeInTheDocument();
+  });
 });

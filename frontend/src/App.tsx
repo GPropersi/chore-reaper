@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route, Outlet, useOutletContext } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Outlet, useOutletContext, useNavigate } from 'react-router-dom';
 import NavBar from './components/nav/NavBar';
 import AdminPanel from './components/admin/AdminPanel';
 import ChoresView from './components/chore/ChoresView';
@@ -44,10 +44,19 @@ type LayoutContext = {
 function Layout({ isAdmin }: { isAdmin: boolean }) {
   const [rooms, setRooms] = useState<string[]>([]);
   const [selectedRoom, setSelectedRoom] = useState('all');
+  const navigate = useNavigate();
+
+  // Room tabs are also the only way back to Home from any other page (e.g.
+  // Admin) — there's no separate home/logo link, so selecting a room must
+  // navigate, not just update the filter state.
+  function handleSelectRoom(room: string) {
+    setSelectedRoom(room);
+    navigate('/');
+  }
 
   return (
     <div>
-      <NavBar rooms={rooms} selectedRoom={selectedRoom} onSelect={setSelectedRoom} isAdmin={isAdmin} />
+      <NavBar rooms={rooms} selectedRoom={selectedRoom} onSelect={handleSelectRoom} isAdmin={isAdmin} />
       <Outlet context={{ selectedRoom, onRoomsChange: setRooms } satisfies LayoutContext} />
     </div>
   );
