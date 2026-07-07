@@ -21,4 +21,19 @@ describe('NavBar', () => {
     renderNavBar(false);
     expect(screen.queryByTestId('admin-nav-link')).not.toBeInTheDocument();
   });
+
+  it('does not mark the Admin link as active while on another route', () => {
+    renderNavBar(true);
+    expect(screen.getByTestId('admin-nav-link')).not.toHaveClass('text-indigo-400');
+  });
+
+  it('marks the Admin link as active while on the Admin route', () => {
+    render(
+      <MemoryRouter initialEntries={['/admin']}>
+        <NavBar rooms={[]} selectedRoom="all" onSelect={() => {}} isAdmin={true} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId('admin-nav-link')).toHaveClass('text-indigo-400');
+  });
 });

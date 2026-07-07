@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import type { Room } from '@customTypes/SharedTypes';
 import RoomTab from './RoomTab';
 
@@ -59,13 +59,19 @@ export default function NavBar({
           ))}
         </div>
         {isAdmin && (
-          <Link
+          <NavLink
             to="/admin"
             data-testid="admin-nav-link"
-            className="px-4 sm:px-6 min-h-[44px] py-3 text-sm sm:text-base font-medium flex items-center text-gray-400 hover:text-gray-200"
+            className={({ isActive }) =>
+              `px-4 sm:px-6 min-h-[44px] py-3 text-sm sm:text-base font-medium flex items-center ${
+                isActive
+                  ? 'border-b-2 border-indigo-500 text-indigo-400'
+                  : 'text-gray-400 hover:text-gray-200'
+              }`
+            }
           >
             Admin
-          </Link>
+          </NavLink>
         )}
       </div>
     </div>
