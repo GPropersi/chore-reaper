@@ -1,4 +1,5 @@
 import type { ApiResponse } from '@customTypes/SharedTypes';
+import { apiUrl } from '../utils/api';
 
 const STORAGE_KEY = 'outbox-v1';
 
@@ -132,7 +133,7 @@ export function createOutbox(fetchImpl: typeof fetch = fetch): Outbox {
       const { url, init } = toRequest(entry);
       let res: Response;
       try {
-        res = await fetchImpl(url, init);
+        res = await fetchImpl(apiUrl(url), { ...init, credentials: 'include' });
       } catch {
         results.push({ entry, outcome: 'error' });
         break;

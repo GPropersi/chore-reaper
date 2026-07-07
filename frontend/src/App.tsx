@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Outlet, useOutletContext, useNavigate } f
 import NavBar from './components/nav/NavBar';
 import AdminPanel from './components/admin/AdminPanel';
 import ChoresView from './components/chore/ChoresView';
+import { apiFetch } from './utils/api';
 
 type Me = {
   id: number;
@@ -20,7 +21,7 @@ function useMe() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/me')
+    apiFetch('/api/me')
       .then((res) => (res.ok ? (res.json() as Promise<Me>) : null))
       .then((fetched) => {
         if (fetched) localStorage.setItem(ME_CACHE_KEY, JSON.stringify(fetched));

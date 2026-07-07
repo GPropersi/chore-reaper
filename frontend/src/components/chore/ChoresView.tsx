@@ -10,6 +10,7 @@ import StatusBanner from '../common/StatusBanner';
 import { useOutbox } from '../../outbox/useOutbox';
 import type { ChorePayload, FlushResult, Outbox, OutboxEntry } from '../../outbox/outbox';
 import { readChoresCache, writeChoresCache } from '../../cache/choresCache';
+import { apiFetch } from '../../utils/api';
 
 type ChoreWire = Omit<Chore, 'dateLastCompleted'> & { dateLastCompleted: string; version: number };
 type ChoreWithVersion = Chore & { version: number };
@@ -123,7 +124,7 @@ export default function ChoresView({
         return;
       }
       try {
-        const res = await fetch('/api/chores');
+        const res = await apiFetch('/api/chores');
         const body = (await res.json()) as ApiResponse<ChoreWire[]>;
         const data = body.data ?? [];
         setChores(mergePendingCreates(data.map(wireToChore), entries));
@@ -149,7 +150,7 @@ export default function ChoresView({
       optimisticApply: () =>
         setChores((prev) => prev.map((c) => (c.id === id ? { ...c, dateLastCompleted: date } : c))),
       request: () =>
-        fetch(`/api/chores/${id}/complete`, {
+        apiFetch(`/api/chores/${id}/complete`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -162,7 +163,7 @@ export default function ChoresView({
   function handleDelete(id: number) {
     mutate<null>({
       optimisticApply: () => setChores((prev) => prev.filter((c) => c.id !== id)),
-      request: () => fetch(`/api/chores/${id}`, { method: 'DELETE' }),
+      request: () => apiFetch(`/api/chores/${id}`, { method: 'DELETE' }),
       onSuccess: () => {},
       onNetworkFailure: () => append({ type: 'delete', choreId: id }),
     });
@@ -175,7 +176,7 @@ export default function ChoresView({
     mutate<ChoreWire>({
       optimisticApply: () => setChores((prev) => [...prev, { ...input, id: tempId, version: 0 }]),
       request: () =>
-        fetch('/api/chores', {
+        apiFetch('/api/chores', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -194,7 +195,7 @@ export default function ChoresView({
     mutate<ChoreWire>({
       optimisticApply: () => setChores((prev) => prev.map((c) => (c.id === id ? { ...c, ...input } : c))),
       request: () =>
-        fetch(`/api/chores/${id}`, {
+        apiFetch(`/api/chores/${id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...payload, version: baseVersion }),
@@ -207,7 +208,7 @@ export default function ChoresView({
 
   async function handleDiscardConflict() {
     setConflictChoreId(null);
-    const res = await fetch('/api/chores');
+    const res = await apiFetch('/api/chores');
     const body = (await res.json()) as ApiResponse<ChoreWire[]>;
     setChores((body.data ?? []).map(wireToChore));
   }

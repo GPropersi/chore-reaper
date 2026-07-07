@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import ConfirmDialog from '../common/ConfirmDialog';
 import StatusBanner from '../common/StatusBanner';
 import AddUserModal, { type AddUserInput } from './AddUserModal';
+import { apiFetch } from '../../utils/api';
 
 export type AdminUser = {
   id: number;
@@ -20,13 +21,13 @@ export default function AdminPanel() {
   const [warning, setWarning] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/api/users')
+    apiFetch('/api/users')
       .then((res) => res.json())
       .then((body: ApiResponse<AdminUser[]>) => setUsers(body.data ?? []));
   }, []);
 
   async function handleAddUser(input: AddUserInput) {
-    const res = await fetch('/api/users', {
+    const res = await apiFetch('/api/users', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
@@ -42,7 +43,7 @@ export default function AdminPanel() {
   async function handleConfirmDelete() {
     const id = pendingDeleteId;
     if (id == null) return;
-    const res = await fetch(`/api/users/${id}`, { method: 'DELETE' });
+    const res = await apiFetch(`/api/users/${id}`, { method: 'DELETE' });
     const body = (await res.json()) as ApiResponse<null>;
     if (body.success) {
       setUsers((prev) => prev.filter((user) => user.id !== id));
