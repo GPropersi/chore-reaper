@@ -2,5 +2,4 @@ ACCESS_JWKS_URL=http://localhost:8790/jwks
 ACCESS_AUD=e2e-test-audience
 CLOUDFLARE_ACCESS_API_TOKEN=fixture-token-not-real
 CF_ACCOUNT_ID=fixture-account
-ACCESS_APP_ID=fixture-app
 ACCESS_POLICY_ID=fixture-policy

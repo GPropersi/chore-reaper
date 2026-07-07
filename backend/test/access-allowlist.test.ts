@@ -4,12 +4,12 @@ import { grantAccessListEntry } from '../src/access-allowlist.js';
 const TEST_ENV = {
   CLOUDFLARE_ACCESS_API_TOKEN: 'test-token',
   CF_ACCOUNT_ID: 'test-account',
-  ACCESS_APP_ID: 'test-app',
   ACCESS_POLICY_ID: 'test-policy',
 };
 
-const POLICY_URL =
-  'https://api.cloudflare.com/client/v4/accounts/test-account/access/apps/test-app/policies/test-policy';
+// Reusable policies (this policy has `"reusable": true`) are edited via the
+// standalone endpoint, not an app-nested path — see access-allowlist.ts.
+const POLICY_URL = 'https://api.cloudflare.com/client/v4/accounts/test-account/access/policies/test-policy';
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {

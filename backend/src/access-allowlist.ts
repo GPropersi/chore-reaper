@@ -1,15 +1,20 @@
 export type AccessEnv = {
   CLOUDFLARE_ACCESS_API_TOKEN: string;
   CF_ACCOUNT_ID: string;
-  ACCESS_APP_ID: string;
   ACCESS_POLICY_ID: string;
 };
 
 export type GrantResult =
   { status: 'granted' } | { status: 'already-present' } | { status: 'failed'; reason: string };
 
+// This targets Cloudflare's *reusable* Access policy — the household allow-list
+// is a `"reusable": true` policy object, not one inline/exclusive to a single
+// Application. Cloudflare documents editing reusable policies via this
+// standalone endpoint, not the app-nested `/access/apps/{app_id}/policies/{id}`
+// path — the nested path can read a reusable policy but isn't the documented
+// way to write to one.
 function policyUrl(env: AccessEnv): string {
-  return `https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/access/apps/${env.ACCESS_APP_ID}/policies/${env.ACCESS_POLICY_ID}`;
+  return `https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/access/policies/${env.ACCESS_POLICY_ID}`;
 }
 
 function includesEmail(include: unknown[], email: string): boolean {

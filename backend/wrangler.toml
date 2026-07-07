@@ -22,8 +22,9 @@ ACCESS_AUD = "d1b1f36ae53d49967e6d516a2db33f9d6be1d867150fd9c18070382187aa2c39"
 # Cloudflare/Zero Trust dashboard (see CLOUDFLARE.md's "half-onboarding
 # pitfall" section for where to look). Inert without the bearer token, so
 # these are plain vars, not secrets — same tier as ACCESS_AUD above.
+# ACCESS_POLICY_ID is a reusable policy's own id — edited via the standalone
+# /access/policies/{id} endpoint, which has no app id in its path.
 CF_ACCOUNT_ID = "00000000000000000000000000000000"
-ACCESS_APP_ID = "00000000-0000-0000-0000-000000000000"
 ACCESS_POLICY_ID = "00000000-0000-0000-0000-000000000000"
 # CLOUDFLARE_ACCESS_API_TOKEN is a real secret and is deliberately NOT declared
 # here — set it via `wrangler secret put CLOUDFLARE_ACCESS_API_TOKEN`, scoped
