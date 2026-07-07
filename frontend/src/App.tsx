@@ -50,7 +50,16 @@ function useMe() {
       .finally(() => setLoading(false));
   }, []);
 
-  return { me, loading };
+  function updateOrgTimezone(organizationTimezone: string) {
+    setMe((prev) => {
+      if (!prev) return prev;
+      const updated = { ...prev, organizationTimezone };
+      localStorage.setItem(ME_CACHE_KEY, JSON.stringify(updated));
+      return updated;
+    });
+  }
+
+  return { me, loading, updateOrgTimezone };
 }
 
 type LayoutContext = {
@@ -95,17 +104,31 @@ function Home({ me }: { me: Me | null }) {
   );
 }
 
-function AdminRoute({ me }: { me: Me | null }) {
+function AdminRoute({
+  me,
+  onOrgTimezoneChange,
+}: {
+  me: Me | null;
+  onOrgTimezoneChange: (timezone: string) => void;
+}) {
   const { rooms, onRoomsChange } = useOutletContext<LayoutContext>();
   if (!me) return null;
   if (me.role !== 'admin') {
     return <div className="p-4 text-gray-400">Access denied.</div>;
   }
-  return <AdminPanel rooms={rooms} onRoomsChange={onRoomsChange} />;
+  return (
+    <AdminPanel
+      rooms={rooms}
+      onRoomsChange={onRoomsChange}
+      organizationId={me.organizationId}
+      organizationTimezone={me.organizationTimezone}
+      onOrgTimezoneChange={onOrgTimezoneChange}
+    />
+  );
 }
 
 function App() {
-  const { me, loading } = useMe();
+  const { me, loading, updateOrgTimezone } = useMe();
 
   if (loading) return null;
 
@@ -114,7 +137,7 @@ function App() {
       <Routes>
         <Route element={<Layout isAdmin={me?.role === 'admin'} />}>
           <Route path="/" element={<Home me={me} />} />
-          <Route path="/admin" element={<AdminRoute me={me} />} />
+          <Route path="/admin" element={<AdminRoute me={me} onOrgTimezoneChange={updateOrgTimezone} />} />
         </Route>
       </Routes>
     </BrowserRouter>

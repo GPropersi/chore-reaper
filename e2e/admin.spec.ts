@@ -21,9 +21,12 @@ test('admin can add a user and see them appear in the list', async ({ page }) =>
   await expect(page.getByRole('heading', { name: 'Users' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Add User' }).click();
-  await page.getByLabel('Email').fill('new-e2e-user@example.com');
-  await page.getByLabel('Role').selectOption('member');
-  await page.getByRole('button', { name: 'Save' }).click();
+  // Scoped to the modal: the Admin page now also has an Organization section
+  // with its own "Save" button, so an unscoped locator is ambiguous.
+  const modal = page.getByTestId('add-user-modal-backdrop');
+  await modal.getByLabel('Email').fill('new-e2e-user@example.com');
+  await modal.getByLabel('Role').selectOption('member');
+  await modal.getByRole('button', { name: 'Save' }).click();
 
   // Scoped to the user list, not a bare page-wide getByText: with fixture
   // Cloudflare credentials in this environment, the Access allow-list grant

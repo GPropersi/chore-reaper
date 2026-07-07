@@ -4,6 +4,7 @@ import ConfirmDialog from '../common/ConfirmDialog';
 import StatusBanner from '../common/StatusBanner';
 import AddUserModal, { type AddUserInput } from './AddUserModal';
 import RoomsSection from './RoomsSection';
+import OrganizationSection from './OrganizationSection';
 import { apiFetch } from '../../utils/api';
 
 export type AdminUser = {
@@ -19,9 +20,18 @@ type ApiResponse<T> = { success: boolean; data?: T; error?: string; warning?: st
 type AdminPanelProps = {
   rooms: Room[];
   onRoomsChange: (rooms: Room[]) => void;
+  organizationId: number;
+  organizationTimezone: string;
+  onOrgTimezoneChange: (timezone: string) => void;
 };
 
-export default function AdminPanel({ rooms, onRoomsChange }: AdminPanelProps) {
+export default function AdminPanel({
+  rooms,
+  onRoomsChange,
+  organizationId,
+  organizationTimezone,
+  onOrgTimezoneChange,
+}: AdminPanelProps) {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
@@ -61,6 +71,12 @@ export default function AdminPanel({ rooms, onRoomsChange }: AdminPanelProps) {
   return (
     <div className="p-4">
       {warning && <StatusBanner tone="warning" message={warning} />}
+
+      <OrganizationSection
+        organizationId={organizationId}
+        organizationTimezone={organizationTimezone}
+        onTimezoneChange={onOrgTimezoneChange}
+      />
 
       <RoomsSection rooms={rooms} onRoomsChange={onRoomsChange} />
 

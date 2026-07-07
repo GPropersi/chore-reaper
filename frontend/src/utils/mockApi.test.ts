@@ -29,6 +29,21 @@ describe('mockFetch: /api/me', () => {
   });
 });
 
+describe('mockFetch: PATCH /api/organizations/:id', () => {
+  it('updates the timezone and reflects it in a subsequent GET /api/me', async () => {
+    const res = await mockFetch('/api/organizations/1', {
+      method: 'PATCH',
+      body: JSON.stringify({ timezone: 'Europe/London' }),
+    });
+    expect(res.status).toBe(200);
+    const body = await json<{ data: { timezone: string } }>(res);
+    expect(body.data.timezone).toBe('Europe/London');
+
+    const meRes = await json<{ organizationTimezone: string }>(await mockFetch('/api/me'));
+    expect(meRes.organizationTimezone).toBe('Europe/London');
+  });
+});
+
 describe('mockFetch: /api/chores', () => {
   it('GET returns a non-empty seeded list wrapped in ApiResponse', async () => {
     const res = await mockFetch('/api/chores');

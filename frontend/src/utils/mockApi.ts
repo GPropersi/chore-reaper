@@ -35,14 +35,16 @@ type MockRoom = {
   name: string;
 };
 
-const MOCK_ME = {
-  id: 1,
-  email: 'preview@example.com',
-  role: 'admin' as const,
-  organizationId: 1,
-  organizationTimezone: 'America/Chicago',
-  timezone: 'America/Chicago',
-};
+function seedMe() {
+  return {
+    id: 1,
+    email: 'preview@example.com',
+    role: 'admin' as const,
+    organizationId: 1,
+    organizationTimezone: 'America/Chicago',
+    timezone: 'America/Chicago',
+  };
+}
 
 function daysAgoIso(now: number, days: number): string {
   return new Date(now - days * 24 * 60 * 60 * 1000).toISOString();
@@ -99,6 +101,7 @@ function seedUsers(): MockUser[] {
 let chores: ChoreWire[] = seedChores();
 let users: MockUser[] = seedUsers();
 let rooms: MockRoom[] = seedRooms();
+let me = seedMe();
 let nextChoreId = 4;
 let nextUserId = 3;
 let nextRoomId = 4;
@@ -107,6 +110,7 @@ export function resetMockData(): void {
   chores = seedChores();
   users = seedUsers();
   rooms = seedRooms();
+  me = seedMe();
   nextChoreId = 4;
   nextUserId = 3;
   nextRoomId = 4;
@@ -125,12 +129,13 @@ const CHORE_ID_RE = /^\/api\/chores\/(\d+)$/;
 const CHORE_COMPLETE_RE = /^\/api\/chores\/(\d+)\/complete$/;
 const USER_ID_RE = /^\/api\/users\/(\d+)$/;
 const ROOM_ID_RE = /^\/api\/rooms\/(\d+)$/;
+const ORGANIZATION_ID_RE = /^\/api\/organizations\/(\d+)$/;
 
 export async function mockFetch(path: string, init?: RequestInit): Promise<Response> {
   const method = (init?.method ?? 'GET').toUpperCase();
 
   if (path === '/api/me' && method === 'GET') {
-    return jsonResponse(MOCK_ME);
+    return jsonResponse(me);
   }
 
   if (path === '/api/chores' && method === 'GET') {
@@ -234,6 +239,17 @@ export async function mockFetch(path: string, init?: RequestInit): Promise<Respo
     }
     rooms = rooms.filter((r) => r.id !== id);
     return jsonResponse({ success: true, data: null });
+  }
+
+  const orgIdMatch = path.match(ORGANIZATION_ID_RE);
+  if (orgIdMatch && method === 'PATCH') {
+    const body = parseBody(init);
+    const timezone = String(body.timezone ?? me.organizationTimezone);
+    me = { ...me, organizationTimezone: timezone };
+    return jsonResponse({
+      success: true,
+      data: { id: Number(orgIdMatch[1]), name: 'Preview Org', timezone },
+    });
   }
 
   return jsonResponse({ success: false, error: `mock not implemented for ${method} ${path}` }, 501);

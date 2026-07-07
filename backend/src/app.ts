@@ -3,6 +3,7 @@ import chores from './routes/chores.js';
 import me from './routes/me.js';
 import users from './routes/users.js';
 import rooms from './routes/rooms.js';
+import organizations from './routes/organizations.js';
 import { accessAuth } from './middleware/access-auth.js';
 import { orgScope } from './middleware/org-scope.js';
 import { requireAdmin } from './middleware/require-admin.js';
@@ -23,5 +24,8 @@ app.route('/api/users', users);
 
 app.use('/api/rooms/*', accessAuth, orgScope);
 app.route('/api/rooms', rooms);
+
+app.use('/api/organizations/*', accessAuth, orgScope, requireAdmin);
+app.route('/api/organizations', organizations);
 
 export default app;

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import AdminPanel from './AdminPanel';
 
@@ -14,7 +14,13 @@ const initialUsers = [
   { id: 2, organizationId: 1, email: 'member@example.com', role: 'member', timezone: null },
 ];
 
-const noRoomsProps = { rooms: [], onRoomsChange: () => {} };
+const noRoomsProps = {
+  rooms: [],
+  onRoomsChange: () => {},
+  organizationId: 1,
+  organizationTimezone: 'America/Chicago',
+  onOrgTimezoneChange: () => {},
+};
 
 beforeEach(() => {
   vi.stubGlobal(
@@ -56,10 +62,11 @@ describe('AdminPanel', () => {
     await screen.findByText('admin@example.com');
 
     await user.click(screen.getByRole('button', { name: 'Add User' }));
-    await user.type(screen.getByLabelText('Email'), 'new@example.com');
-    await user.selectOptions(screen.getByLabelText('Role'), 'admin');
-    await user.type(screen.getByLabelText('Timezone'), 'America/New_York');
-    await user.click(screen.getByRole('button', { name: 'Save' }));
+    const modal = screen.getByTestId('add-user-modal-backdrop');
+    await user.type(within(modal).getByLabelText('Email'), 'new@example.com');
+    await user.selectOptions(within(modal).getByLabelText('Role'), 'admin');
+    await user.selectOptions(within(modal).getByLabelText('Timezone'), 'America/New_York');
+    await user.click(within(modal).getByRole('button', { name: 'Save' }));
 
     expect(await screen.findByText('new@example.com')).toBeInTheDocument();
     const fetchMock = vi.mocked(fetch);
@@ -98,8 +105,9 @@ describe('AdminPanel', () => {
     await screen.findByText('admin@example.com');
 
     await user.click(screen.getByRole('button', { name: 'Add User' }));
-    await user.type(screen.getByLabelText('Email'), 'new@example.com');
-    await user.click(screen.getByRole('button', { name: 'Save' }));
+    const modal = screen.getByTestId('add-user-modal-backdrop');
+    await user.type(within(modal).getByLabelText('Email'), 'new@example.com');
+    await user.click(within(modal).getByRole('button', { name: 'Save' }));
 
     expect(
       await screen.findByText(
@@ -114,8 +122,9 @@ describe('AdminPanel', () => {
     await screen.findByText('admin@example.com');
 
     await user.click(screen.getByRole('button', { name: 'Add User' }));
-    await user.type(screen.getByLabelText('Email'), 'new@example.com');
-    await user.click(screen.getByRole('button', { name: 'Save' }));
+    const modal = screen.getByTestId('add-user-modal-backdrop');
+    await user.type(within(modal).getByLabelText('Email'), 'new@example.com');
+    await user.click(within(modal).getByRole('button', { name: 'Save' }));
 
     await screen.findByText('new@example.com');
     expect(screen.queryByTestId('status-banner')).not.toBeInTheDocument();

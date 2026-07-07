@@ -1,6 +1,7 @@
 import { createPortal } from 'react-dom';
 import { useState } from 'react';
 import FormField from '../form/FormField';
+import TimezoneSelect from '../form/TimezoneSelect';
 
 export type AddUserInput = {
   email: string;
@@ -60,12 +61,7 @@ export default function AddUserModal({ onSubmit, onCancel }: AddUserModalProps) 
               <option value="admin">Admin</option>
             </select>
           </div>
-          <FormField
-            name="timezone"
-            label="Timezone"
-            value={timezone}
-            onChange={(_, value) => setTimezone(value)}
-          />
+          <TimezoneSelect id="timezone" label="Timezone" value={timezone} onChange={setTimezone} allowUnset />
 
           <div className="flex gap-3 mt-2">
             <button
