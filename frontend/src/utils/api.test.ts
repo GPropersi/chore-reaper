@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { apiUrl, apiFetch } from './api';
+import { apiFetch } from './api';
+import { resetMockData } from './mockApi';
 
 function setHostname(hostname: string) {
   Object.defineProperty(window, 'location', {
@@ -14,51 +15,50 @@ const ORIGINAL_HOSTNAME = window.location.hostname;
 afterEach(() => {
   setHostname(ORIGINAL_HOSTNAME);
   vi.unstubAllGlobals();
-});
-
-describe('apiUrl', () => {
-  it('returns the path unchanged on the production custom domain', () => {
-    setHostname('chores.4irl.app');
-    expect(apiUrl('/api/chores')).toBe('/api/chores');
-  });
-
-  it('returns the path unchanged in local dev', () => {
-    setHostname('localhost');
-    expect(apiUrl('/api/chores')).toBe('/api/chores');
-  });
-
-  it('prefixes with the production API origin on a Cloudflare Pages preview domain', () => {
-    setHostname('feat-x-branch.chores4irl-frontend.pages.dev');
-    expect(apiUrl('/api/chores')).toBe('https://chores.4irl.app/api/chores');
-  });
-
-  it('prefixes on the Pages project default domain too, not just branch previews', () => {
-    setHostname('chores4irl-frontend.pages.dev');
-    expect(apiUrl('/api/me')).toBe('https://chores.4irl.app/api/me');
-  });
+  resetMockData();
 });
 
 describe('apiFetch', () => {
-  it('always sends credentials: include, and prefixes the URL when on a preview domain', async () => {
-    setHostname('feat-x-branch.chores4irl-frontend.pages.dev');
+  it('calls the real network on the production custom domain', async () => {
+    setHostname('chores.4irl.app');
     const fetchMock = vi.fn(() => Promise.resolve(new Response('{}')));
     vi.stubGlobal('fetch', fetchMock);
 
     await apiFetch('/api/chores', { method: 'POST' });
 
-    expect(fetchMock).toHaveBeenCalledWith('https://chores.4irl.app/api/chores', {
-      method: 'POST',
-      credentials: 'include',
-    });
+    expect(fetchMock).toHaveBeenCalledWith('/api/chores', { method: 'POST' });
   });
 
-  it('does not let a caller override credentials away from include', async () => {
-    setHostname('chores.4irl.app');
+  it('calls the real network in local dev', async () => {
+    setHostname('localhost');
     const fetchMock = vi.fn(() => Promise.resolve(new Response('{}')));
     vi.stubGlobal('fetch', fetchMock);
 
-    await apiFetch('/api/me', { credentials: 'omit' } as RequestInit);
+    await apiFetch('/api/me');
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/me', { credentials: 'include' });
+    expect(fetchMock).toHaveBeenCalledWith('/api/me', undefined);
+  });
+
+  it('never touches the network on a Cloudflare Pages preview domain — routes to mock data instead', async () => {
+    setHostname('feat-x-branch.chores4irl-frontend.pages.dev');
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await apiFetch('/api/me');
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { role: string };
+    expect(body.role).toBe('admin');
+  });
+
+  it('routes on the Pages project default domain too, not just branch previews', async () => {
+    setHostname('chores4irl-frontend.pages.dev');
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await apiFetch('/api/chores');
+
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
