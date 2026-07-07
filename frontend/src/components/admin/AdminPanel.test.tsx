@@ -14,6 +14,8 @@ const initialUsers = [
   { id: 2, organizationId: 1, email: 'member@example.com', role: 'member', timezone: null },
 ];
 
+const noRoomsProps = { rooms: [], onRoomsChange: () => {} };
+
 beforeEach(() => {
   vi.stubGlobal(
     'fetch',
@@ -42,7 +44,7 @@ afterEach(() => {
 
 describe('AdminPanel', () => {
   it('renders the fetched user list', async () => {
-    render(<AdminPanel />);
+    render(<AdminPanel {...noRoomsProps} />);
 
     expect(await screen.findByText('admin@example.com')).toBeInTheDocument();
     expect(screen.getByText('member@example.com')).toBeInTheDocument();
@@ -50,7 +52,7 @@ describe('AdminPanel', () => {
 
   it('submits the add-user form to POST /api/users and appends the result to the list', async () => {
     const user = userEvent.setup();
-    render(<AdminPanel />);
+    render(<AdminPanel {...noRoomsProps} />);
     await screen.findByText('admin@example.com');
 
     await user.click(screen.getByRole('button', { name: 'Add User' }));
@@ -92,7 +94,7 @@ describe('AdminPanel', () => {
       }),
     );
     const user = userEvent.setup();
-    render(<AdminPanel />);
+    render(<AdminPanel {...noRoomsProps} />);
     await screen.findByText('admin@example.com');
 
     await user.click(screen.getByRole('button', { name: 'Add User' }));
@@ -108,7 +110,7 @@ describe('AdminPanel', () => {
 
   it('renders no warning banner when POST /api/users returns none', async () => {
     const user = userEvent.setup();
-    render(<AdminPanel />);
+    render(<AdminPanel {...noRoomsProps} />);
     await screen.findByText('admin@example.com');
 
     await user.click(screen.getByRole('button', { name: 'Add User' }));
@@ -121,7 +123,7 @@ describe('AdminPanel', () => {
 
   it('flows remove-user through ConfirmDialog before calling DELETE', async () => {
     const user = userEvent.setup();
-    render(<AdminPanel />);
+    render(<AdminPanel {...noRoomsProps} />);
     await screen.findByText('admin@example.com');
 
     await user.click(screen.getAllByRole('button', { name: 'Remove' })[0]);

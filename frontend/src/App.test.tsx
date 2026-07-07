@@ -23,6 +23,14 @@ const meResponse = {
   timezone: 'Asia/Tokyo',
 };
 
+const roomsResponse = {
+  success: true,
+  data: [
+    { id: 1, organizationId: 1, name: 'Living Room' },
+    { id: 2, organizationId: 1, name: 'Kitchen' },
+  ],
+};
+
 afterEach(() => {
   vi.unstubAllGlobals();
   localStorage.clear();
@@ -48,6 +56,9 @@ describe('App', () => {
         if (url === '/api/chores') {
           return jsonResponse({ success: true, data: [] });
         }
+        if (url === '/api/rooms') {
+          return jsonResponse(roomsResponse);
+        }
         throw new Error(`Unhandled fetch: ${url}`);
       }),
     );
@@ -67,6 +78,7 @@ describe('App', () => {
         const url = typeof input === 'string' ? input : input.toString();
         if (url === '/api/me') return jsonResponse(meResponse);
         if (url === '/api/chores') return jsonResponse({ success: true, data: [] });
+        if (url === '/api/rooms') return jsonResponse(roomsResponse);
         throw new Error(`Unhandled fetch: ${url}`);
       }),
     );
@@ -99,7 +111,7 @@ describe('App', () => {
               {
                 id: 1,
                 name: 'Vacuum',
-                room: 'Living Room',
+                roomId: 1,
                 dateLastCompleted: '2026-06-01T00:00:00.000Z',
                 duration: 20,
                 frequency: 7,
@@ -108,7 +120,7 @@ describe('App', () => {
               {
                 id: 2,
                 name: 'Dishes',
-                room: 'Kitchen',
+                roomId: 2,
                 dateLastCompleted: '2026-06-20T00:00:00.000Z',
                 duration: 5,
                 frequency: 1,
@@ -117,6 +129,7 @@ describe('App', () => {
             ],
           });
         }
+        if (url === '/api/rooms') return jsonResponse(roomsResponse);
         throw new Error(`Unhandled fetch: ${url}`);
       }),
     );
@@ -149,7 +162,7 @@ describe('App', () => {
               {
                 id: 1,
                 name: 'Vacuum',
-                room: 'Living Room',
+                roomId: 1,
                 dateLastCompleted: '2026-06-01T00:00:00.000Z',
                 duration: 20,
                 frequency: 7,
@@ -159,6 +172,7 @@ describe('App', () => {
           });
         }
         if (url === '/api/users') return jsonResponse({ success: true, data: [] });
+        if (url === '/api/rooms') return jsonResponse(roomsResponse);
         throw new Error(`Unhandled fetch: ${url}`);
       }),
     );

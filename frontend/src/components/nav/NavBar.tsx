@@ -1,8 +1,9 @@
 import { Link } from 'react-router-dom';
+import type { Room } from '@customTypes/SharedTypes';
 import RoomTab from './RoomTab';
 
 type NavBarProps = {
-  rooms: string[];
+  rooms: Room[];
   selectedRoom: string;
   onSelect: (room: string) => void;
   isAdmin?: boolean;
@@ -16,10 +17,10 @@ export default function NavBar({ rooms, selectedRoom, onSelect, isAdmin = false 
           <RoomTab label="All" value="all" isActive={selectedRoom === 'all'} onClick={onSelect} />
           {rooms.map((room) => (
             <RoomTab
-              key={room}
-              label={room}
-              value={room}
-              isActive={selectedRoom === room}
+              key={room.id}
+              label={room.name}
+              value={String(room.id)}
+              isActive={selectedRoom === String(room.id)}
               onClick={onSelect}
             />
           ))}

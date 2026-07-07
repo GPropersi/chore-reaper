@@ -4,6 +4,7 @@ import { seedMockChores } from '../src/seed-mock-chores.js';
 
 beforeEach(async () => {
   await env.DB.exec('DELETE FROM chores');
+  await env.DB.exec('DELETE FROM rooms');
   await env.DB.exec('DELETE FROM users');
   await env.DB.exec('DELETE FROM organizations');
   await env.DB.prepare('INSERT INTO organizations (id, name, timezone) VALUES (1, ?, ?)')

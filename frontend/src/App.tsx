@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Outlet, useOutletContext, useNavigate } from 'react-router-dom';
+import type { Room } from '@customTypes/SharedTypes';
 import NavBar from './components/nav/NavBar';
 import AdminPanel from './components/admin/AdminPanel';
 import ChoresView from './components/chore/ChoresView';
@@ -13,6 +14,21 @@ type Me = {
   organizationTimezone: string;
   timezone: string;
 };
+
+type ApiResponse<T> = { success: boolean; data?: T; error?: string };
+
+function useRooms() {
+  const [rooms, setRooms] = useState<Room[]>([]);
+
+  useEffect(() => {
+    apiFetch('/api/rooms')
+      .then((res) => res.json() as Promise<ApiResponse<Room[]>>)
+      .then((body) => setRooms(body.data ?? []))
+      .catch(() => {});
+  }, []);
+
+  return { rooms, setRooms };
+}
 
 const ME_CACHE_KEY = 'me-cache-v1';
 
@@ -39,11 +55,12 @@ function useMe() {
 
 type LayoutContext = {
   selectedRoom: string;
-  onRoomsChange: (rooms: string[]) => void;
+  rooms: Room[];
+  onRoomsChange: (rooms: Room[]) => void;
 };
 
 function Layout({ isAdmin }: { isAdmin: boolean }) {
-  const [rooms, setRooms] = useState<string[]>([]);
+  const { rooms, setRooms } = useRooms();
   const [selectedRoom, setSelectedRoom] = useState('all');
   const navigate = useNavigate();
 
@@ -58,13 +75,13 @@ function Layout({ isAdmin }: { isAdmin: boolean }) {
   return (
     <div>
       <NavBar rooms={rooms} selectedRoom={selectedRoom} onSelect={handleSelectRoom} isAdmin={isAdmin} />
-      <Outlet context={{ selectedRoom, onRoomsChange: setRooms } satisfies LayoutContext} />
+      <Outlet context={{ selectedRoom, rooms, onRoomsChange: setRooms } satisfies LayoutContext} />
     </div>
   );
 }
 
 function Home({ me }: { me: Me | null }) {
-  const { selectedRoom, onRoomsChange } = useOutletContext<LayoutContext>();
+  const { selectedRoom, rooms } = useOutletContext<LayoutContext>();
   if (!me) return null;
   return (
     <div className="p-4">
@@ -72,18 +89,19 @@ function Home({ me }: { me: Me | null }) {
         organizationTimezone={me.organizationTimezone}
         timezone={me.timezone}
         selectedRoom={selectedRoom}
-        onRoomsChange={onRoomsChange}
+        rooms={rooms}
       />
     </div>
   );
 }
 
 function AdminRoute({ me }: { me: Me | null }) {
+  const { rooms, onRoomsChange } = useOutletContext<LayoutContext>();
   if (!me) return null;
   if (me.role !== 'admin') {
     return <div className="p-4 text-gray-400">Access denied.</div>;
   }
-  return <AdminPanel />;
+  return <AdminPanel rooms={rooms} onRoomsChange={onRoomsChange} />;
 }
 
 function App() {

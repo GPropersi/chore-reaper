@@ -5,7 +5,7 @@ const STORAGE_KEY = 'outbox-v1';
 export type ChorePayload = {
   name: string;
   details?: string | null;
-  room: string;
+  roomId: number;
   dateLastCompleted: string;
   duration: number;
   frequency: number;

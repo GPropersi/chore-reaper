@@ -1,11 +1,12 @@
 import type { Chore } from '../../types/SharedTypes.js';
+import { roomBelongsToOrg } from './rooms.js';
 
 type ChoreRow = {
   id: number;
   organization_id: number;
   name: string;
   details: string | null;
-  room: string;
+  room_id: number;
   date_last_completed: string;
   duration: number;
   frequency: number;
@@ -24,14 +25,17 @@ export type ChoreInput = Omit<Chore, 'id' | 'dateLastCompleted'> & {
 };
 
 export type MutationResult =
-  { status: 'ok'; chore: ChoreWire } | { status: 'conflict' } | { status: 'not_found' };
+  | { status: 'ok'; chore: ChoreWire }
+  | { status: 'conflict' }
+  | { status: 'not_found' }
+  | { status: 'invalid_room' };
 
 function rowToChore(row: ChoreRow): ChoreWire {
   return {
     id: row.id,
     name: row.name,
     details: row.details ?? null,
-    room: row.room,
+    roomId: row.room_id,
     dateLastCompleted: row.date_last_completed,
     duration: row.duration,
     frequency: row.frequency,
@@ -53,25 +57,31 @@ export async function getAllChores(db: D1Database, organizationId: number): Prom
   return result.results.map(rowToChore);
 }
 
+export type CreateChoreResult = { status: 'ok'; chore: ChoreWire } | { status: 'invalid_room' };
+
 export async function createChore(
   db: D1Database,
   organizationId: number,
   input: ChoreInput,
   clientId?: string,
-): Promise<ChoreWire> {
+): Promise<CreateChoreResult> {
+  if (!(await roomBelongsToOrg(db, organizationId, input.roomId))) {
+    return { status: 'invalid_room' };
+  }
+
   let lastRowId: number | bigint;
   try {
     const result = await db
       .prepare(
         `INSERT INTO chores
-          (organization_id, name, details, room, date_last_completed, duration, frequency, urgency, long_term_task, version, client_id)
+          (organization_id, name, details, room_id, date_last_completed, duration, frequency, urgency, long_term_task, version, client_id)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
       )
       .bind(
         organizationId,
         input.name,
         input.details ?? null,
-        input.room,
+        input.roomId,
         dateLastCompletedString(input.dateLastCompleted),
         input.duration,
         input.frequency,
@@ -87,14 +97,14 @@ export async function createChore(
       .prepare('SELECT * FROM chores WHERE organization_id = ? AND client_id = ?')
       .bind(organizationId, clientId)
       .first<ChoreRow>();
-    return rowToChore(existing!);
+    return { status: 'ok', chore: rowToChore(existing!) };
   }
 
   const row = await db
     .prepare('SELECT * FROM chores WHERE id = ? AND organization_id = ?')
     .bind(lastRowId, organizationId)
     .first<ChoreRow>();
-  return rowToChore(row!);
+  return { status: 'ok', chore: rowToChore(row!) };
 }
 
 async function fetchByOrg(db: D1Database, organizationId: number, id: number): Promise<ChoreRow | null> {
@@ -132,11 +142,15 @@ export async function updateChore(
   input: ChoreInput,
   expectedVersion: number,
 ): Promise<MutationResult> {
+  if (!(await roomBelongsToOrg(db, organizationId, input.roomId))) {
+    return { status: 'invalid_room' };
+  }
+
   return applyVersionedMutation(db, organizationId, id, expectedVersion, () =>
     db
       .prepare(
         `UPDATE chores
-         SET name = ?, details = ?, room = ?, date_last_completed = ?,
+         SET name = ?, details = ?, room_id = ?, date_last_completed = ?,
              duration = ?, frequency = ?, urgency = ?, long_term_task = ?,
              version = version + 1
          WHERE id = ? AND organization_id = ? AND version = ?`,
@@ -144,7 +158,7 @@ export async function updateChore(
       .bind(
         input.name,
         input.details ?? null,
-        input.room,
+        input.roomId,
         dateLastCompletedString(input.dateLastCompleted),
         input.duration,
         input.frequency,

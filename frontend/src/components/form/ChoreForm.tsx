@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import type { Chore } from '@customTypes/SharedTypes';
+import type { Chore, Room } from '@customTypes/SharedTypes';
 import FormField from './FormField';
 
 type FormState = {
   name: string;
   details: string;
-  room: string;
+  roomId: string;
   dateLastCompleted: string;
   duration: string;
   frequency: string;
@@ -16,7 +16,7 @@ type FormState = {
 const initialFormState: FormState = {
   name: '',
   details: '',
-  room: '',
+  roomId: '',
   dateLastCompleted: '',
   duration: '',
   frequency: '',
@@ -28,7 +28,7 @@ function choreToFormState(chore: Chore): FormState {
   return {
     name: chore.name,
     details: chore.details ?? '',
-    room: chore.room,
+    roomId: String(chore.roomId),
     dateLastCompleted: chore.dateLastCompleted.toISOString().slice(0, 10),
     duration: String(chore.duration),
     frequency: String(chore.frequency),
@@ -40,11 +40,12 @@ function choreToFormState(chore: Chore): FormState {
 type ChoreFormProps = {
   mode?: 'add' | 'edit';
   initialChore?: Chore;
+  rooms: Room[];
   onSubmit: (chore: Omit<Chore, 'id'>) => void;
   onCancel: () => void;
 };
 
-export default function ChoreForm({ mode = 'add', initialChore, onSubmit, onCancel }: ChoreFormProps) {
+export default function ChoreForm({ mode = 'add', initialChore, rooms, onSubmit, onCancel }: ChoreFormProps) {
   const [formData, setFormData] = useState<FormState>(() =>
     initialChore ? choreToFormState(initialChore) : initialFormState,
   );
@@ -55,10 +56,11 @@ export default function ChoreForm({ mode = 'add', initialChore, onSubmit, onCanc
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!formData.roomId) return;
     onSubmit({
       name: formData.name,
       details: formData.details || null,
-      room: formData.room,
+      roomId: Number(formData.roomId),
       dateLastCompleted: new Date(formData.dateLastCompleted),
       duration: Number(formData.duration),
       frequency: Number(formData.frequency),
@@ -83,7 +85,27 @@ export default function ChoreForm({ mode = 'add', initialChore, onSubmit, onCanc
           autoFocus
         />
         <FormField name="details" label="Details" value={formData.details} onChange={handleFieldChange} />
-        <FormField name="room" label="Room" value={formData.room} onChange={handleFieldChange} required />
+        <div className="flex flex-col gap-1">
+          <label htmlFor="roomId" className="text-sm text-gray-400">
+            Room
+          </label>
+          <select
+            id="roomId"
+            value={formData.roomId}
+            onChange={(e) => handleFieldChange('roomId', e.target.value)}
+            required
+            className="bg-gray-700 text-white rounded px-3 py-2 text-sm"
+          >
+            <option value="" disabled>
+              Select a room
+            </option>
+            {rooms.map((room) => (
+              <option key={room.id} value={room.id}>
+                {room.name}
+              </option>
+            ))}
+          </select>
+        </div>
         <FormField
           name="dateLastCompleted"
           label="Last Completed"

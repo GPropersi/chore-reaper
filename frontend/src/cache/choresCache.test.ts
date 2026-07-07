@@ -5,7 +5,7 @@ const sampleChores = [
   {
     id: 1,
     name: 'Vacuum',
-    room: 'Living Room',
+    roomId: 1,
     dateLastCompleted: '2026-06-01T00:00:00.000Z',
     duration: 20,
     frequency: 7,
@@ -39,7 +39,7 @@ describe('choresCache', () => {
       {
         id: 2,
         name: 'Dishes',
-        room: 'Kitchen',
+        roomId: 2,
         dateLastCompleted: '2026-06-20T00:00:00.000Z',
         duration: 5,
         frequency: 1,

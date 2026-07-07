@@ -8,7 +8,7 @@ const chores = new Hono<AppEnv>();
 function hasRequiredChoreFields(body: Record<string, unknown>): boolean {
   return (
     Boolean(body.name) &&
-    Boolean(body.room) &&
+    body.roomId != null &&
     Boolean(body.dateLastCompleted) &&
     body.duration != null &&
     body.frequency != null
@@ -26,8 +26,11 @@ chores.post('/', async (c) => {
     return c.json({ success: false, error: 'Missing required fields' } satisfies ApiResponse<never>, 400);
   }
   const clientId = typeof body.clientId === 'string' ? body.clientId : undefined;
-  const data = await createChore(c.env.DB, c.var.organizationId, body as never, clientId);
-  return c.json({ success: true, data } satisfies ApiResponse<typeof data>, 201);
+  const result = await createChore(c.env.DB, c.var.organizationId, body as never, clientId);
+  if (result.status === 'invalid_room') {
+    return c.json({ success: false, error: 'Invalid room' } satisfies ApiResponse<never>, 400);
+  }
+  return c.json({ success: true, data: result.chore } satisfies ApiResponse<typeof result.chore>, 201);
 });
 
 chores.put('/:id', async (c) => {
@@ -45,6 +48,9 @@ chores.put('/:id', async (c) => {
   }
   if (result.status === 'conflict') {
     return c.json({ success: false, error: 'Chore was changed elsewhere' } satisfies ApiResponse<never>, 409);
+  }
+  if (result.status === 'invalid_room') {
+    return c.json({ success: false, error: 'Invalid room' } satisfies ApiResponse<never>, 400);
   }
   return c.json({ success: true, data: result.chore } satisfies ApiResponse<typeof result.chore>);
 });

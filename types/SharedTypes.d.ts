@@ -5,12 +5,18 @@ export interface Chore {
   id: number;
   name: string;
   details?: string | null;
-  room: string;
+  roomId: number;
   dateLastCompleted: Date;
   duration: number;
   frequency: number;
   urgency?: 'low' | 'medium' | 'high';
   longTermTask?: boolean;
+}
+
+export interface Room {
+  id: number;
+  organizationId: number;
+  name: string;
 }
 
 export interface ApiResponse<T> {

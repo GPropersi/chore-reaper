@@ -14,7 +14,7 @@ type ChoreWire = {
   id: number;
   name: string;
   details?: string | null;
-  room: string;
+  roomId: number;
   dateLastCompleted: string;
   duration: number;
   frequency: number;
@@ -27,6 +27,12 @@ type MockUser = {
   email: string;
   role: 'admin' | 'member';
   timezone: string | null;
+};
+
+type MockRoom = {
+  id: number;
+  organizationId: number;
+  name: string;
 };
 
 const MOCK_ME = {
@@ -42,13 +48,21 @@ function daysAgoIso(now: number, days: number): string {
   return new Date(now - days * 24 * 60 * 60 * 1000).toISOString();
 }
 
+function seedRooms(): MockRoom[] {
+  return [
+    { id: 1, organizationId: 1, name: 'Living Room' },
+    { id: 2, organizationId: 1, name: 'Kitchen' },
+    { id: 3, organizationId: 1, name: 'Bathroom' },
+  ];
+}
+
 function seedChores(): ChoreWire[] {
   const now = Date.now();
   return [
     {
       id: 1,
       name: 'Vacuum',
-      room: 'Living Room',
+      roomId: 1,
       dateLastCompleted: daysAgoIso(now, 3),
       duration: 20,
       frequency: 7,
@@ -57,7 +71,7 @@ function seedChores(): ChoreWire[] {
     {
       id: 2,
       name: 'Dishes',
-      room: 'Kitchen',
+      roomId: 2,
       dateLastCompleted: daysAgoIso(now, 0),
       duration: 5,
       frequency: 1,
@@ -66,7 +80,7 @@ function seedChores(): ChoreWire[] {
     {
       id: 3,
       name: "Clip Maple's Nails",
-      room: 'Bathroom',
+      roomId: 3,
       dateLastCompleted: daysAgoIso(now, 20),
       duration: 10,
       frequency: 18,
@@ -84,14 +98,18 @@ function seedUsers(): MockUser[] {
 
 let chores: ChoreWire[] = seedChores();
 let users: MockUser[] = seedUsers();
+let rooms: MockRoom[] = seedRooms();
 let nextChoreId = 4;
 let nextUserId = 3;
+let nextRoomId = 4;
 
 export function resetMockData(): void {
   chores = seedChores();
   users = seedUsers();
+  rooms = seedRooms();
   nextChoreId = 4;
   nextUserId = 3;
+  nextRoomId = 4;
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -106,6 +124,7 @@ function parseBody(init?: RequestInit): Record<string, unknown> {
 const CHORE_ID_RE = /^\/api\/chores\/(\d+)$/;
 const CHORE_COMPLETE_RE = /^\/api\/chores\/(\d+)\/complete$/;
 const USER_ID_RE = /^\/api\/users\/(\d+)$/;
+const ROOM_ID_RE = /^\/api\/rooms\/(\d+)$/;
 
 export async function mockFetch(path: string, init?: RequestInit): Promise<Response> {
   const method = (init?.method ?? 'GET').toUpperCase();
@@ -170,6 +189,50 @@ export async function mockFetch(path: string, init?: RequestInit): Promise<Respo
     const id = Number(userIdMatch[1]);
     if (!users.some((u) => u.id === id)) return jsonResponse({ success: false, error: 'not found' }, 404);
     users = users.filter((u) => u.id !== id);
+    return jsonResponse({ success: true, data: null });
+  }
+
+  if (path === '/api/rooms' && method === 'GET') {
+    return jsonResponse({ success: true, data: rooms });
+  }
+  if (path === '/api/rooms' && method === 'POST') {
+    const body = parseBody(init);
+    const name = String(body.name ?? '');
+    if (rooms.some((r) => r.name === name)) {
+      return jsonResponse({ success: false, error: 'A room with this name already exists' }, 409);
+    }
+    const room: MockRoom = { id: nextRoomId++, organizationId: 1, name };
+    rooms = [...rooms, room];
+    return jsonResponse({ success: true, data: room }, 201);
+  }
+  const roomIdMatch = path.match(ROOM_ID_RE);
+  if (roomIdMatch && method === 'PUT') {
+    const id = Number(roomIdMatch[1]);
+    const existing = rooms.find((r) => r.id === id);
+    if (!existing) return jsonResponse({ success: false, error: 'not found' }, 404);
+    const body = parseBody(init);
+    const name = String(body.name ?? existing.name);
+    if (rooms.some((r) => r.id !== id && r.name === name)) {
+      return jsonResponse({ success: false, error: 'A room with this name already exists' }, 409);
+    }
+    const updated = { ...existing, name };
+    rooms = rooms.map((r) => (r.id === id ? updated : r));
+    return jsonResponse({ success: true, data: updated });
+  }
+  if (roomIdMatch && method === 'DELETE') {
+    const id = Number(roomIdMatch[1]);
+    if (!rooms.some((r) => r.id === id)) return jsonResponse({ success: false, error: 'not found' }, 404);
+    const choreCount = chores.filter((c) => c.roomId === id).length;
+    if (choreCount > 0) {
+      return jsonResponse(
+        {
+          success: false,
+          error: `${choreCount} chore(s) are still in this room — reassign or delete them first`,
+        },
+        409,
+      );
+    }
+    rooms = rooms.filter((r) => r.id !== id);
     return jsonResponse({ success: true, data: null });
   }
 

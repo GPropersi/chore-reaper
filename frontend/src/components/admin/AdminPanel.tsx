@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
+import type { Room } from '@customTypes/SharedTypes';
 import ConfirmDialog from '../common/ConfirmDialog';
 import StatusBanner from '../common/StatusBanner';
 import AddUserModal, { type AddUserInput } from './AddUserModal';
+import RoomsSection from './RoomsSection';
 import { apiFetch } from '../../utils/api';
 
 export type AdminUser = {
@@ -14,7 +16,12 @@ export type AdminUser = {
 
 type ApiResponse<T> = { success: boolean; data?: T; error?: string; warning?: string };
 
-export default function AdminPanel() {
+type AdminPanelProps = {
+  rooms: Room[];
+  onRoomsChange: (rooms: Room[]) => void;
+};
+
+export default function AdminPanel({ rooms, onRoomsChange }: AdminPanelProps) {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
@@ -54,6 +61,9 @@ export default function AdminPanel() {
   return (
     <div className="p-4">
       {warning && <StatusBanner tone="warning" message={warning} />}
+
+      <RoomsSection rooms={rooms} onRoomsChange={onRoomsChange} />
+
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-white text-lg font-semibold">Users</h2>
         <button

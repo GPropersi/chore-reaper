@@ -42,18 +42,32 @@ export async function seedMockChores(
     );
   }
 
+  const roomNames = Array.from(new Set(MOCK_CHORES.map((spec) => spec.room)));
+  await db.batch(
+    roomNames.map((name) =>
+      db
+        .prepare('INSERT OR IGNORE INTO rooms (organization_id, name) VALUES (?, ?)')
+        .bind(organizationId, name),
+    ),
+  );
+  const roomRows = await db
+    .prepare('SELECT id, name FROM rooms WHERE organization_id = ?')
+    .bind(organizationId)
+    .all<{ id: number; name: string }>();
+  const roomIdByName = new Map(roomRows.results.map((row) => [row.name, row.id]));
+
   const statements = MOCK_CHORES.map((spec) => {
     const dateLastCompleted = new Date(now.getTime() - spec.daysAgo * 24 * 60 * 60 * 1000).toISOString();
     return db
       .prepare(
         `INSERT INTO chores
-          (organization_id, name, room, date_last_completed, duration, frequency, long_term_task, version)
+          (organization_id, name, room_id, date_last_completed, duration, frequency, long_term_task, version)
          VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
       )
       .bind(
         organizationId,
         spec.name,
-        spec.room,
+        roomIdByName.get(spec.room),
         dateLastCompleted,
         spec.duration,
         spec.frequency,

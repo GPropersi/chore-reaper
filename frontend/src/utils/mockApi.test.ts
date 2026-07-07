@@ -4,7 +4,7 @@ import { mockFetch, resetMockData } from './mockApi';
 type ChoreWire = {
   id: number;
   name: string;
-  room: string;
+  roomId: number;
   dateLastCompleted: string;
   duration: number;
   frequency: number;
@@ -42,7 +42,7 @@ describe('mockFetch: /api/chores', () => {
       method: 'POST',
       body: JSON.stringify({
         name: 'Mop Floors',
-        room: 'Kitchen',
+        roomId: 2,
         dateLastCompleted: '2026-07-01T00:00:00.000Z',
         duration: 15,
         frequency: 3,
@@ -67,7 +67,7 @@ describe('mockFetch: /api/chores', () => {
       method: 'PUT',
       body: JSON.stringify({
         name: 'Renamed Chore',
-        room: target.room,
+        roomId: target.roomId,
         dateLastCompleted: target.dateLastCompleted,
         duration: target.duration,
         frequency: target.frequency,
@@ -142,13 +142,61 @@ describe('mockFetch: /api/users', () => {
   });
 });
 
+describe('mockFetch: /api/rooms', () => {
+  it('GET returns a non-empty seeded list', async () => {
+    const res = await mockFetch('/api/rooms');
+    const body = await json<{ success: boolean; data: { id: number; name: string }[] }>(res);
+    expect(body.success).toBe(true);
+    expect(body.data.length).toBeGreaterThan(0);
+  });
+
+  it('POST creates a room and it appears in a subsequent GET', async () => {
+    const createRes = await mockFetch('/api/rooms', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Garage' }),
+    });
+    expect(createRes.status).toBe(201);
+
+    const listRes = await mockFetch('/api/rooms');
+    const list = await json<{ data: { name: string }[] }>(listRes);
+    expect(list.data.map((r) => r.name)).toContain('Garage');
+  });
+
+  it('POST returns 409 for a duplicate name', async () => {
+    const res = await mockFetch('/api/rooms', { method: 'POST', body: JSON.stringify({ name: 'Kitchen' }) });
+    expect(res.status).toBe(409);
+  });
+
+  it('DELETE returns 409 when the room still has chores', async () => {
+    const before = await json<{ data: { id: number; roomId: number }[] }>(await mockFetch('/api/chores'));
+    const inUseRoomId = before.data[0].roomId;
+
+    const res = await mockFetch(`/api/rooms/${inUseRoomId}`, { method: 'DELETE' });
+    expect(res.status).toBe(409);
+  });
+
+  it('DELETE removes an empty room', async () => {
+    const createRes = await mockFetch('/api/rooms', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Garage' }),
+    });
+    const created = await json<{ data: { id: number } }>(createRes);
+
+    const res = await mockFetch(`/api/rooms/${created.data.id}`, { method: 'DELETE' });
+    expect(res.status).toBe(200);
+
+    const after = await json<{ data: { id: number }[] }>(await mockFetch('/api/rooms'));
+    expect(after.data.map((r) => r.id)).not.toContain(created.data.id);
+  });
+});
+
 describe('resetMockData', () => {
   it('restores the original seed data, discarding any mutations', async () => {
     await mockFetch('/api/chores', {
       method: 'POST',
       body: JSON.stringify({
         name: 'Temporary',
-        room: 'Kitchen',
+        roomId: 2,
         dateLastCompleted: '2026-07-01T00:00:00.000Z',
         duration: 1,
         frequency: 1,

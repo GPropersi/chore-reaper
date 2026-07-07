@@ -7,13 +7,18 @@ import { signTestJwt } from '../helpers/sign-test-jwt.js';
 import { stubAccessJwks, testEnv, TEST_ACCESS_AUD } from '../helpers/access-test-env.js';
 import type { AppEnv } from '../../src/types.js';
 
-const validChoreBody = {
-  name: 'Vacuum',
-  room: 'Living Room',
-  dateLastCompleted: '2026-06-01T00:00:00.000Z',
-  duration: 20,
-  frequency: 7,
-};
+const ROOM_A = 1;
+const ROOM_B = 2;
+
+function validChoreBody(roomId: number) {
+  return {
+    name: 'Vacuum',
+    roomId,
+    dateLastCompleted: '2026-06-01T00:00:00.000Z',
+    duration: 20,
+    frequency: 7,
+  };
+}
 
 function appWithStubEmail(email: string) {
   const stubApp = new Hono<AppEnv>();
@@ -37,6 +42,14 @@ async function seedOrgsAndUsers() {
   await env.DB.batch([
     env.DB.prepare('INSERT INTO organizations (id, name, timezone) VALUES (1, ?, ?)').bind('Org A', 'UTC'),
     env.DB.prepare('INSERT INTO organizations (id, name, timezone) VALUES (2, ?, ?)').bind('Org B', 'UTC'),
+    env.DB.prepare('INSERT INTO rooms (id, organization_id, name) VALUES (?, 1, ?)').bind(
+      ROOM_A,
+      'Living Room',
+    ),
+    env.DB.prepare('INSERT INTO rooms (id, organization_id, name) VALUES (?, 2, ?)').bind(
+      ROOM_B,
+      'Living Room',
+    ),
     env.DB.prepare(
       'INSERT INTO users (id, organization_id, email, role, timezone) VALUES (1, 1, ?, ?, ?)',
     ).bind('admin-a@example.com', 'admin', 'America/Chicago'),
@@ -56,6 +69,7 @@ function authHeader(email: string) {
 beforeEach(async () => {
   stubAccessJwks();
   await env.DB.exec('DELETE FROM chores');
+  await env.DB.exec('DELETE FROM rooms');
   await env.DB.exec('DELETE FROM users');
   await env.DB.exec('DELETE FROM organizations');
 });
@@ -90,7 +104,7 @@ describe('cross-org access through the full app', () => {
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(await authHeader('admin-b@example.com')) },
-        body: JSON.stringify(validChoreBody),
+        body: JSON.stringify(validChoreBody(ROOM_B)),
       },
       testEnv(),
     );
@@ -101,7 +115,7 @@ describe('cross-org access through the full app', () => {
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', ...(await authHeader('admin-a@example.com')) },
-        body: JSON.stringify({ ...validChoreBody, version: 1 }),
+        body: JSON.stringify({ ...validChoreBody(ROOM_A), version: 1 }),
       },
       testEnv(),
     );
@@ -117,7 +131,7 @@ describe('cross-org access through the full app', () => {
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(await authHeader('admin-a@example.com')) },
-        body: JSON.stringify({ ...validChoreBody, name: 'Org A Chore' }),
+        body: JSON.stringify({ ...validChoreBody(ROOM_A), name: 'Org A Chore' }),
       },
       testEnv(),
     );
@@ -126,7 +140,7 @@ describe('cross-org access through the full app', () => {
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(await authHeader('admin-b@example.com')) },
-        body: JSON.stringify({ ...validChoreBody, name: 'Org B Chore' }),
+        body: JSON.stringify({ ...validChoreBody(ROOM_B), name: 'Org B Chore' }),
       },
       testEnv(),
     );

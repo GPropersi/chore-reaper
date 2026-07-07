@@ -6,6 +6,7 @@ import type { AppEnv } from '../../src/types.js';
 
 const ORG_A = 1;
 const ORG_B = 2;
+const ROOM_A = 1;
 
 function testApp(organizationId: number) {
   const app = new Hono<AppEnv>();
@@ -22,6 +23,7 @@ function testApp(organizationId: number) {
 
 beforeEach(async () => {
   await env.DB.exec('DELETE FROM chores');
+  await env.DB.exec('DELETE FROM rooms');
   await env.DB.exec('DELETE FROM users');
   await env.DB.exec('DELETE FROM organizations');
   await env.DB.batch([
@@ -35,12 +37,17 @@ beforeEach(async () => {
       'Org B',
       'UTC',
     ),
+    env.DB.prepare('INSERT INTO rooms (id, organization_id, name) VALUES (?, ?, ?)').bind(
+      ROOM_A,
+      ORG_A,
+      'Living Room',
+    ),
   ]);
 });
 
 const validChoreBody = {
   name: 'Vacuum',
-  room: 'Living Room',
+  roomId: ROOM_A,
   dateLastCompleted: '2026-06-01T00:00:00.000Z',
   duration: 20,
   frequency: 7,

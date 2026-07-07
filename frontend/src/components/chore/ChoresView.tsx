@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import type { Chore } from '@customTypes/SharedTypes';
+import { useEffect, useState } from 'react';
+import type { Chore, Room } from '@customTypes/SharedTypes';
 import { useMidnightClock } from '../../hooks/useMidnightClock';
 import { useRoomFilter } from '../../hooks/useRoomFilter';
 import { orderChores } from '@utils/choreSort';
@@ -26,7 +26,7 @@ type ChoresViewProps = {
   timezone: string;
   outbox?: Outbox;
   selectedRoom?: string;
-  onRoomsChange?: (rooms: string[]) => void;
+  rooms: Room[];
 };
 
 function toChorePayload(input: Omit<Chore, 'id'>): ChorePayload {
@@ -86,7 +86,7 @@ export default function ChoresView({
   timezone,
   outbox: outboxProp,
   selectedRoom = 'all',
-  onRoomsChange,
+  rooms,
 }: ChoresViewProps) {
   const today = useMidnightClock(organizationTimezone);
   const [chores, setChores] = useState<ChoreWithVersion[]>([]);
@@ -220,15 +220,6 @@ export default function ChoresView({
 
   const editingChore = chores.find((c) => c.id === editingId);
 
-  const rooms = useMemo(() => Array.from(new Set(chores.map((c) => c.room))).sort(), [chores]);
-
-  useEffect(() => {
-    onRoomsChange?.(rooms);
-    // `onRoomsChange` is expected to be a state setter (or equally stable) from the caller —
-    // depending on it here would refire on every parent render, not just when `rooms` changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rooms]);
-
   const visibleChores = useRoomFilter(chores, selectedRoom);
 
   return (
@@ -258,11 +249,17 @@ export default function ChoresView({
         onEdit={setEditingId}
       />
       {isAddOpen && (
-        <ChoreFormModal mode="add" onSubmit={handleAddSubmit} onCancel={() => setIsAddOpen(false)} />
+        <ChoreFormModal
+          mode="add"
+          rooms={rooms}
+          onSubmit={handleAddSubmit}
+          onCancel={() => setIsAddOpen(false)}
+        />
       )}
       {editingChore && (
         <ChoreFormModal
           mode="edit"
+          rooms={rooms}
           initialChore={editingChore}
           onSubmit={handleEditSubmit}
           onCancel={() => setEditingId(null)}
