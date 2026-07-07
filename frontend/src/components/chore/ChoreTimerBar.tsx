@@ -48,7 +48,11 @@ export default function ChoreTimerBar({
     },
     delta: 50,
     trackMouse: true,
-    preventScrollOnSwipe: false,
+    // Passive touch listeners (the default when this is false) let iOS
+    // Safari's own scroll/gesture recognizer claim the touch sequence before
+    // onSwipedLeft/onSwipedRight ever fire — true forces a non-passive
+    // listener so this element can actually win the gesture on iOS.
+    preventScrollOnSwipe: true,
   });
 
   function resetTask() {
@@ -75,6 +79,24 @@ export default function ChoreTimerBar({
       </div>
 
       {isOverdue && <span className="sr-only">Overdue</span>}
+
+      {/* Persistent visible cue that this row is swipeable — visible on every
+          render, on every platform, unlike the sr-only buttons below which
+          only appear on keyboard focus. */}
+      <span
+        aria-hidden="true"
+        data-testid="swipe-hint-left"
+        className="absolute left-1 top-1/2 -translate-y-1/2 text-white text-opacity-30 text-lg leading-none pointer-events-none select-none"
+      >
+        ‹
+      </span>
+      <span
+        aria-hidden="true"
+        data-testid="swipe-hint-right"
+        className="absolute right-1 top-1/2 -translate-y-1/2 text-white text-opacity-30 text-lg leading-none pointer-events-none select-none"
+      >
+        ›
+      </span>
 
       {/* Swipe is the primary delete/edit affordance (F5); these sr-only buttons are the keyboard/AT fallback. */}
       {onEdit && (
