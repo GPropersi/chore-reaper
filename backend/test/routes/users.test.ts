@@ -3,6 +3,7 @@ import { env } from 'cloudflare:workers';
 import app from '../../src/app.js';
 import { signTestJwt } from '../helpers/sign-test-jwt.js';
 import { stubAccessJwks, testEnv, TEST_ACCESS_AUD, TEST_JWKS_URL } from '../helpers/access-test-env.js';
+import { seedOrgMember } from '../helpers/seed.js';
 import primaryJwks from '../fixtures/test-jwks.json' with { type: 'json' };
 
 const ACCESS_ALLOWLIST_ENV = {
@@ -21,7 +22,7 @@ function jsonResponse(body: unknown, status = 200) {
 
 // Stubs both the JWKS endpoint (needed for accessAuth to verify the request's
 // own JWT) and the Cloudflare Access policy endpoint the route calls out to
-// after creating a user, so these tests can exercise the real
+// after adding a member, so these tests can exercise the real
 // grantAccessListEntry implementation end-to-end rather than re-stubbing its
 // already-covered internals (see access-allowlist.test.ts for those cases).
 function stubJwksAndPolicy(policyInclude: unknown[], putStatus = 200) {
@@ -57,24 +58,16 @@ async function authHeader(email: string) {
 beforeEach(async () => {
   stubAccessJwks();
   await env.DB.exec('DELETE FROM chores');
+  await env.DB.exec('DELETE FROM org_members');
   await env.DB.exec('DELETE FROM users');
   await env.DB.exec('DELETE FROM organizations');
   await env.DB.batch([
     env.DB.prepare('INSERT INTO organizations (id, name, timezone) VALUES (1, ?, ?)').bind('Org A', 'UTC'),
     env.DB.prepare('INSERT INTO organizations (id, name, timezone) VALUES (2, ?, ?)').bind('Org B', 'UTC'),
-    env.DB.prepare('INSERT INTO users (id, organization_id, email, role) VALUES (1, 1, ?, ?)').bind(
-      'admin-a@example.com',
-      'admin',
-    ),
-    env.DB.prepare('INSERT INTO users (id, organization_id, email, role) VALUES (2, 2, ?, ?)').bind(
-      'admin-b@example.com',
-      'admin',
-    ),
-    env.DB.prepare('INSERT INTO users (id, organization_id, email, role) VALUES (3, 1, ?, ?)').bind(
-      'member-a@example.com',
-      'member',
-    ),
   ]);
+  await seedOrgMember({ id: 1, organizationId: 1, email: 'admin-a@example.com', role: 'admin' });
+  await seedOrgMember({ id: 2, organizationId: 2, email: 'admin-b@example.com', role: 'admin' });
+  await seedOrgMember({ id: 3, organizationId: 1, email: 'member-a@example.com', role: 'member' });
 });
 
 afterEach(() => {
@@ -141,6 +134,49 @@ describe('POST /api/users', () => {
     const meRes = await app.request('/api/me', { headers: await authHeader('JANE@EXAMPLE.com') }, testEnv());
 
     expect(meRes.status).toBe(200);
+  });
+
+  it('adding an email that already belongs to another org creates only a new membership, not a duplicate user', async () => {
+    // admin-b@example.com already has a users row (org 2) from beforeEach —
+    // adding them to org 1 must not touch/duplicate that row.
+    const res = await app.request(
+      '/api/users',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await authHeader('admin-a@example.com')) },
+        body: JSON.stringify({ email: 'admin-b@example.com', role: 'member' }),
+      },
+      testEnv(),
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { data: { organizationId: number; role: string } };
+    expect(body.data.organizationId).toBe(1);
+    expect(body.data.role).toBe('member');
+
+    const usersCount = await env.DB.prepare('SELECT COUNT(*) as count FROM users WHERE email = ?')
+      .bind('admin-b@example.com')
+      .first<{ count: number }>();
+    expect(usersCount?.count).toBe(1);
+
+    const memberships = await env.DB.prepare(
+      'SELECT organization_id FROM org_members WHERE user_id = 2',
+    ).all<{
+      organization_id: number;
+    }>();
+    expect(memberships.results.map((m) => m.organization_id).sort()).toEqual([1, 2]);
+  });
+
+  it('returns 409 when the email is already a member of the current org', async () => {
+    const res = await app.request(
+      '/api/users',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await authHeader('admin-a@example.com')) },
+        body: JSON.stringify({ email: 'member-a@example.com', role: 'member' }),
+      },
+      testEnv(),
+    );
+    expect(res.status).toBe(409);
   });
 
   it('grants Cloudflare Access on creation and returns no warning when the grant succeeds', async () => {
@@ -252,5 +288,27 @@ describe('DELETE /api/users/:id', () => {
       testEnv(),
     );
     expect(res.status).toBe(200);
+  });
+
+  it('removing a user from one org does not affect their membership in another', async () => {
+    // Give admin-b (org 2 only, from beforeEach) a second membership in org 1.
+    await env.DB.prepare('INSERT INTO org_members (user_id, organization_id, role) VALUES (2, 1, ?)')
+      .bind('member')
+      .run();
+
+    const res = await app.request(
+      '/api/users/2',
+      { method: 'DELETE', headers: await authHeader('admin-a@example.com') },
+      testEnv(),
+    );
+    expect(res.status).toBe(200);
+
+    const remainingMembership = await env.DB.prepare(
+      'SELECT id FROM org_members WHERE user_id = 2 AND organization_id = 2',
+    ).first<{ id: number }>();
+    expect(remainingMembership).toBeTruthy();
+
+    const usersRow = await env.DB.prepare('SELECT id FROM users WHERE id = 2').first<{ id: number }>();
+    expect(usersRow).toBeTruthy();
   });
 });

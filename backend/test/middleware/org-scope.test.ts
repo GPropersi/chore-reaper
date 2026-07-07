@@ -5,6 +5,7 @@ import { orgScope } from '../../src/middleware/org-scope.js';
 import app from '../../src/app.js';
 import { signTestJwt } from '../helpers/sign-test-jwt.js';
 import { stubAccessJwks, testEnv, TEST_ACCESS_AUD } from '../helpers/access-test-env.js';
+import { seedOrgMember, seedAdditionalMembership } from '../helpers/seed.js';
 import type { AppEnv } from '../../src/types.js';
 
 const ROOM_A = 1;
@@ -50,16 +51,16 @@ async function seedOrgsAndUsers() {
       ROOM_B,
       'Living Room',
     ),
-    env.DB.prepare(
-      'INSERT INTO users (id, organization_id, email, role, timezone) VALUES (1, 1, ?, ?, ?)',
-    ).bind('admin-a@example.com', 'admin', 'America/Chicago'),
-    env.DB.prepare(
-      'INSERT INTO users (id, organization_id, email, role, timezone) VALUES (2, 2, ?, ?, ?)',
-    ).bind('admin-b@example.com', 'admin', null),
-    env.DB.prepare(
-      'INSERT INTO users (id, organization_id, email, role, timezone) VALUES (3, 1, ?, ?, ?)',
-    ).bind('member-a@example.com', 'member', null),
   ]);
+  await seedOrgMember({
+    id: 1,
+    organizationId: 1,
+    email: 'admin-a@example.com',
+    role: 'admin',
+    timezone: 'America/Chicago',
+  });
+  await seedOrgMember({ id: 2, organizationId: 2, email: 'admin-b@example.com', role: 'admin' });
+  await seedOrgMember({ id: 3, organizationId: 1, email: 'member-a@example.com', role: 'member' });
 }
 
 function authHeader(email: string) {
@@ -70,6 +71,7 @@ beforeEach(async () => {
   stubAccessJwks();
   await env.DB.exec('DELETE FROM chores');
   await env.DB.exec('DELETE FROM rooms');
+  await env.DB.exec('DELETE FROM org_members');
   await env.DB.exec('DELETE FROM users');
   await env.DB.exec('DELETE FROM organizations');
 });
@@ -92,6 +94,93 @@ describe('orgScope', () => {
     const res = await appWithStubEmail('ghost@example.com').request('/whoami', {}, env);
 
     expect(res.status).toBe(401);
+  });
+
+  it('resolves org 1 without a header when the user has exactly one membership (zero-friction single-org case)', async () => {
+    await seedOrgsAndUsers();
+
+    const res = await appWithStubEmail('admin-a@example.com').request('/whoami', {}, env);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ organizationId: 1, role: 'admin' });
+  });
+
+  describe('multi-org membership', () => {
+    it('resolves to the org named by X-Org-Id when the user belongs to more than one', async () => {
+      await seedOrgsAndUsers();
+      await seedAdditionalMembership(1, 2, 'member');
+
+      const res = await appWithStubEmail('admin-a@example.com').request(
+        '/whoami',
+        { headers: { 'X-Org-Id': '2' } },
+        env,
+      );
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ organizationId: 2, role: 'member' });
+    });
+
+    it('never leaks the other org just because the same email/JWT is used', async () => {
+      await seedOrgsAndUsers();
+      await seedAdditionalMembership(1, 2, 'member');
+
+      const resOrg1 = await appWithStubEmail('admin-a@example.com').request(
+        '/whoami',
+        { headers: { 'X-Org-Id': '1' } },
+        env,
+      );
+      const resOrg2 = await appWithStubEmail('admin-a@example.com').request(
+        '/whoami',
+        { headers: { 'X-Org-Id': '2' } },
+        env,
+      );
+
+      expect((await resOrg1.json()) as { organizationId: number }).toMatchObject({ organizationId: 1 });
+      expect((await resOrg2.json()) as { organizationId: number }).toMatchObject({ organizationId: 2 });
+    });
+
+    it('returns 400 (not a silent default) when multiple memberships exist and no header is given', async () => {
+      await seedOrgsAndUsers();
+      await seedAdditionalMembership(1, 2, 'member');
+
+      const res = await appWithStubEmail('admin-a@example.com').request('/whoami', {}, env);
+
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 403 when X-Org-Id names a real org the user is not a member of', async () => {
+      await seedOrgsAndUsers();
+
+      const res = await appWithStubEmail('admin-a@example.com').request(
+        '/whoami',
+        { headers: { 'X-Org-Id': '2' } },
+        env,
+      );
+
+      expect(res.status).toBe(403);
+    });
+
+    it("requireAdmin reads the CURRENT org's per-membership role, not a stale one from another org", async () => {
+      await seedOrgsAndUsers();
+      // admin-a is admin of org 1, but only a member of org 2.
+      await seedAdditionalMembership(1, 2, 'member');
+
+      const res = await app.request(
+        '/api/rooms',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Org-Id': '2',
+            ...(await authHeader('admin-a@example.com')),
+          },
+          body: JSON.stringify({ name: 'Garage' }),
+        },
+        testEnv(),
+      );
+
+      expect(res.status).toBe(403);
+    });
   });
 });
 

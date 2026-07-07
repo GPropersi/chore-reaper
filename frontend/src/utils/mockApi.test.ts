@@ -20,12 +20,18 @@ beforeEach(() => {
 });
 
 describe('mockFetch: /api/me', () => {
-  it('returns a fake authenticated admin user', async () => {
+  it('returns a fake authenticated admin user with a single-org membership', async () => {
     const res = await mockFetch('/api/me');
     expect(res.status).toBe(200);
-    const me = await json<{ role: string; email: string }>(res);
-    expect(me.role).toBe('admin');
+    const me = await json<{
+      email: string;
+      currentOrganizationId: number;
+      memberships: { organizationId: number; role: string }[];
+    }>(res);
     expect(me.email).toBeTruthy();
+    expect(me.memberships).toHaveLength(1);
+    expect(me.memberships[0].role).toBe('admin');
+    expect(me.currentOrganizationId).toBe(me.memberships[0].organizationId);
   });
 });
 
@@ -39,8 +45,10 @@ describe('mockFetch: PATCH /api/organizations/:id', () => {
     const body = await json<{ data: { timezone: string } }>(res);
     expect(body.data.timezone).toBe('Europe/London');
 
-    const meRes = await json<{ organizationTimezone: string }>(await mockFetch('/api/me'));
-    expect(meRes.organizationTimezone).toBe('Europe/London');
+    const meRes = await json<{ memberships: { organizationId: number; organizationTimezone: string }[] }>(
+      await mockFetch('/api/me'),
+    );
+    expect(meRes.memberships.find((m) => m.organizationId === 1)?.organizationTimezone).toBe('Europe/London');
   });
 });
 

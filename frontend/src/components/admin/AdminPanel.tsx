@@ -52,9 +52,13 @@ export default function AdminPanel({
     const body = (await res.json()) as ApiResponse<AdminUser>;
     if (body.success && body.data) {
       setUsers((prev) => [...prev, body.data as AdminUser]);
+      setWarning(body.warning ?? null);
+      setIsAddOpen(false);
+    } else {
+      // Keep the modal open on failure (e.g. already a member of this org)
+      // so the admin can see what went wrong and correct the email/role.
+      setWarning(body.error ?? 'Could not add user');
     }
-    setWarning(body.warning ?? null);
-    setIsAddOpen(false);
   }
 
   async function handleConfirmDelete() {

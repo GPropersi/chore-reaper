@@ -9,13 +9,13 @@ export async function bootstrapAdmin(
   adminEmail: string,
   timezone = 'UTC',
 ): Promise<BootstrapResult> {
-  const existing = await db
+  const existingOrg = await db
     .prepare('SELECT id FROM organizations WHERE name = ?')
     .bind(orgName)
     .first<{ id: number }>();
-  if (existing) {
+  if (existingOrg) {
     throw new Error(
-      `An organization named "${orgName}" already exists (id ${existing.id}) — refusing to create a duplicate`,
+      `An organization named "${orgName}" already exists (id ${existingOrg.id}) — refusing to create a duplicate`,
     );
   }
 
@@ -25,10 +25,31 @@ export async function bootstrapAdmin(
     .run();
   const organizationId = orgResult.meta.last_row_id;
 
-  const userResult = await db
-    .prepare("INSERT INTO users (organization_id, email, role) VALUES (?, ?, 'admin')")
-    .bind(organizationId, adminEmail.trim().toLowerCase())
+  const normalizedEmail = adminEmail.trim().toLowerCase();
+  const existingUser = await db
+    .prepare('SELECT id FROM users WHERE email = ?')
+    .bind(normalizedEmail)
+    .first<{ id: number }>();
+
+  // Same person bootstrapping a second org (e.g. running this script twice
+  // with the same email for two different households) reuses their existing
+  // `users` row — email is a person's single identity — and just gains a new
+  // org_members row for the new org.
+  let userId: number | bigint;
+  if (existingUser) {
+    userId = existingUser.id;
+  } else {
+    const userResult = await db
+      .prepare("INSERT INTO users (organization_id, email, role) VALUES (?, ?, 'admin')")
+      .bind(organizationId, normalizedEmail)
+      .run();
+    userId = userResult.meta.last_row_id;
+  }
+
+  await db
+    .prepare("INSERT INTO org_members (user_id, organization_id, role) VALUES (?, ?, 'admin')")
+    .bind(userId, organizationId)
     .run();
 
-  return { organizationId, userId: userResult.meta.last_row_id };
+  return { organizationId, userId };
 }

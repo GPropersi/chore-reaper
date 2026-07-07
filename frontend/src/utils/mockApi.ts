@@ -39,10 +39,16 @@ function seedMe() {
   return {
     id: 1,
     email: 'preview@example.com',
-    role: 'admin' as const,
-    organizationId: 1,
-    organizationTimezone: 'America/Chicago',
     timezone: 'America/Chicago',
+    memberships: [
+      {
+        organizationId: 1,
+        organizationName: 'Preview Org',
+        organizationTimezone: 'America/Chicago',
+        role: 'admin' as const,
+      },
+    ],
+    currentOrganizationId: 1,
   };
 }
 
@@ -243,13 +249,17 @@ export async function mockFetch(path: string, init?: RequestInit): Promise<Respo
 
   const orgIdMatch = path.match(ORGANIZATION_ID_RE);
   if (orgIdMatch && method === 'PATCH') {
+    const orgId = Number(orgIdMatch[1]);
     const body = parseBody(init);
-    const timezone = String(body.timezone ?? me.organizationTimezone);
-    me = { ...me, organizationTimezone: timezone };
-    return jsonResponse({
-      success: true,
-      data: { id: Number(orgIdMatch[1]), name: 'Preview Org', timezone },
-    });
+    const current = me.memberships.find((m) => m.organizationId === orgId);
+    const timezone = String(body.timezone ?? current?.organizationTimezone ?? 'UTC');
+    me = {
+      ...me,
+      memberships: me.memberships.map((m) =>
+        m.organizationId === orgId ? { ...m, organizationTimezone: timezone } : m,
+      ),
+    };
+    return jsonResponse({ success: true, data: { id: orgId, name: 'Preview Org', timezone } });
   }
 
   return jsonResponse({ success: false, error: `mock not implemented for ${method} ${path}` }, 501);

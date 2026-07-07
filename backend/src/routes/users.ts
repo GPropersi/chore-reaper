@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { ApiResponse } from '../../../types/SharedTypes.js';
-import { getUsersByOrg, createUser, deleteUserInOrg } from '../users.js';
+import { getUsersByOrg, addOrgMember, removeOrgMember } from '../users.js';
 import { grantAccessListEntry } from '../access-allowlist.js';
 import type { AppEnv } from '../types.js';
 
@@ -17,14 +17,26 @@ users.post('/', async (c) => {
     return c.json({ success: false, error: 'Missing required fields' } satisfies ApiResponse<never>, 400);
   }
   // organizationId always comes from the admin's own session, never the
-  // request body — an admin cannot create a user in a different org by
+  // request body — an admin cannot add a member to a different org by
   // passing a different organizationId here.
-  const data = await createUser(
+  const result = await addOrgMember(
     c.env.DB,
     c.var.organizationId,
     { email: String(body.email), role: body.role, timezone: body.timezone ? String(body.timezone) : null },
     c.var.userId,
   );
+
+  if (result.status === 'already_member') {
+    return c.json(
+      {
+        success: false,
+        error: 'This email is already a member of this organization',
+      } satisfies ApiResponse<never>,
+      409,
+    );
+  }
+
+  const data = result.user;
 
   // The D1 write above is authoritative and is never rolled back over an
   // Access-API problem — a failed auto-grant just degrades to the same
@@ -36,7 +48,7 @@ users.post('/', async (c) => {
   try {
     const grant = await grantAccessListEntry(c.env, data.email);
     if (grant.status === 'failed') {
-      warning = `User created, but could not be added to the Cloudflare Access allow-list automatically (${grant.reason}). Add ${data.email} manually in the Zero Trust dashboard.`;
+      warning = `User added, but could not be added to the Cloudflare Access allow-list automatically (${grant.reason}). Add ${data.email} manually in the Zero Trust dashboard.`;
     }
     console.log(
       JSON.stringify({
@@ -48,7 +60,7 @@ users.post('/', async (c) => {
       }),
     );
   } catch (err) {
-    warning = `User created, but could not be added to the Cloudflare Access allow-list automatically. Add ${data.email} manually in the Zero Trust dashboard.`;
+    warning = `User added, but could not be added to the Cloudflare Access allow-list automatically. Add ${data.email} manually in the Zero Trust dashboard.`;
     console.log(JSON.stringify({ event: 'access-grant-threw', email: data.email, error: String(err) }));
   }
 
@@ -63,8 +75,8 @@ users.delete('/:id', async (c) => {
   if (Number.isNaN(id)) {
     return c.json({ success: false, error: 'Invalid id' } satisfies ApiResponse<never>, 400);
   }
-  const deleted = await deleteUserInOrg(c.env.DB, c.var.organizationId, id);
-  if (!deleted) {
+  const removed = await removeOrgMember(c.env.DB, c.var.organizationId, id);
+  if (!removed) {
     return c.json({ success: false, error: 'User not found' } satisfies ApiResponse<never>, 404);
   }
   return c.json({ success: true, data: null } satisfies ApiResponse<null>);

@@ -3,6 +3,7 @@ import { env } from 'cloudflare:workers';
 import app from '../../src/app.js';
 import { signTestJwt } from '../helpers/sign-test-jwt.js';
 import { stubAccessJwks, testEnv, TEST_ACCESS_AUD } from '../helpers/access-test-env.js';
+import { seedOrgMember } from '../helpers/seed.js';
 
 const ORG_A = 1;
 const ORG_B = 2;
@@ -18,6 +19,7 @@ beforeEach(async () => {
   stubAccessJwks();
   await env.DB.exec('DELETE FROM chores');
   await env.DB.exec('DELETE FROM rooms');
+  await env.DB.exec('DELETE FROM org_members');
   await env.DB.exec('DELETE FROM users');
   await env.DB.exec('DELETE FROM organizations');
   await env.DB.batch([
@@ -33,15 +35,9 @@ beforeEach(async () => {
       ORG_B,
       'Kitchen',
     ),
-    env.DB.prepare('INSERT INTO users (id, organization_id, email, role) VALUES (1, 1, ?, ?)').bind(
-      'admin-a@example.com',
-      'admin',
-    ),
-    env.DB.prepare('INSERT INTO users (id, organization_id, email, role) VALUES (2, 1, ?, ?)').bind(
-      'member-a@example.com',
-      'member',
-    ),
   ]);
+  await seedOrgMember({ id: 1, organizationId: ORG_A, email: 'admin-a@example.com', role: 'admin' });
+  await seedOrgMember({ id: 2, organizationId: ORG_A, email: 'member-a@example.com', role: 'member' });
 });
 
 afterEach(() => {
