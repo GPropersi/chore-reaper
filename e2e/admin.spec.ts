@@ -25,5 +25,9 @@ test('admin can add a user and see them appear in the list', async ({ page }) =>
   await page.getByLabel('Role').selectOption('member');
   await page.getByRole('button', { name: 'Save' }).click();
 
-  await expect(page.getByText('new-e2e-user@example.com')).toBeVisible();
+  // Scoped to the user list, not a bare page-wide getByText: with fixture
+  // Cloudflare credentials in this environment, the Access allow-list grant
+  // fails gracefully and surfaces a warning banner that also contains this
+  // email as text, so an unscoped locator matches both and is ambiguous.
+  await expect(page.getByTestId('user-list').getByText('new-e2e-user@example.com')).toBeVisible();
 });
