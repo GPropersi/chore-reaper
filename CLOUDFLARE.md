@@ -309,6 +309,18 @@ Access-level login for the whole app, not just their own org. This is correct to
 perimeter gate for the app, not per-org) and isn't a new escalation versus the fully-manual process this
 replaces — just worth knowing if this app ever supports many organizations.
 
+**Verified live in production** (2026-07-07): the policy targeted is a _reusable_ Cloudflare Access
+policy (`"reusable": true`), which must be edited via the standalone
+`/accounts/{account_id}/access/policies/{policy_id}` endpoint — the app-nested
+`/access/apps/{app_id}/policies/{policy_id}` path can read a reusable policy but isn't the documented way
+to write to one. `ACCESS_APP_ID` turned out to be unnecessary for this reason and was dropped entirely.
+`ACCESS_AUD`, `CF_ACCOUNT_ID`, and `ACCESS_POLICY_ID` are all set as Worker secrets
+(`wrangler secret put`), not `wrangler.toml` vars — nothing Cloudflare-account-specific is committed to
+this public repo. The Access Application was rebuilt from scratch during this rollout (fresh audience
+tag, hostname/login-method/session-duration reconfigured, the existing reusable allow-list policy
+re-attached), since the original `ACCESS_AUD` had already been committed to git history earlier in
+development. Live end-to-end grant confirmed working against the real Cloudflare API.
+
 **Deliberately add-only, never remove**: removing an allow-list entry doesn't revoke already-issued
 bearer JWTs anyway (session duration here is 6–12 months, see Phase 0 above) — an automated "remove"
 would risk security theater (an admin believing access was cut off when it wasn't) on top of being able
