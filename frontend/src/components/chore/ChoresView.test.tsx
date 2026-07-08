@@ -102,7 +102,7 @@ describe('ChoresView', () => {
 
     await waitFor(() => expect(screen.getByText('Vacuum')).toBeInTheDocument());
     expect(screen.getByTestId('timezone-mismatch-notice')).toHaveTextContent(
-      /Asia\/Tokyo.*America\/New_York/,
+      /Tokyo \(UTC[+-]\d+(:\d{2})?\).*New York \(UTC[+-]\d+(:\d{2})?\)/,
     );
   });
 

@@ -12,6 +12,7 @@ import type { ChorePayload, FlushResult, Outbox, OutboxEntry } from '../../outbo
 import { readChoresCache, writeChoresCache } from '../../cache/choresCache';
 import { apiFetch } from '../../utils/api';
 import { getDeviceTimezone } from '@utils/deviceTimezone';
+import { cityLabel, utcOffsetLabel } from '@utils/timezones';
 
 type ChoreWire = Omit<Chore, 'dateLastCompleted'> & { dateLastCompleted: string; version: number };
 type ChoreWithVersion = Chore & { version: number };
@@ -238,7 +239,8 @@ export default function ChoresView({
       <div className="flex items-center p-4">
         {timezoneMismatch && (
           <span data-testid="timezone-mismatch-notice" className="text-amber-400 text-xs mr-3">
-            Your device is set to {deviceTimezone}, but this household runs on {householdTimezone} — due dates
+            Your device is set to {cityLabel(deviceTimezone)} ({utcOffsetLabel(deviceTimezone)}), but this
+            household runs on {cityLabel(householdTimezone)} ({utcOffsetLabel(householdTimezone)}) — due dates
             use the household's clock.
           </span>
         )}
