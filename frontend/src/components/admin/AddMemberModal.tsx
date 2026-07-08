@@ -55,7 +55,8 @@ export default function AddMemberModal({ onSubmit, onCancel }: AddMemberModalPro
               id="role"
               value={role}
               onChange={(e) => setRole(e.target.value as 'admin' | 'user')}
-              className="bg-gray-700 text-white rounded px-3 py-2 text-sm"
+              // 16px below sm avoids iOS Safari's zoom-on-focus for <select>.
+              className="bg-gray-700 text-white rounded px-3 py-2 text-base sm:text-sm"
             >
               <option value="user">User</option>
               <option value="admin">Admin</option>

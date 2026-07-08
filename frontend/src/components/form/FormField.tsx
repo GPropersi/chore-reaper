@@ -30,7 +30,10 @@ export default function FormField({
         onChange={(e) => onChange(name, e.target.value)}
         required={required}
         autoFocus={autoFocus}
-        className="bg-gray-700 text-white rounded px-3 py-2 text-sm"
+        // iOS Safari zooms the whole page in on focus for any text input under
+        // 16px, and doesn't zoom back out once the field blurs/unmounts —
+        // text-base (16px) below the sm breakpoint avoids triggering it.
+        className="bg-gray-700 text-white rounded px-3 py-2 text-base sm:text-sm"
       />
     </div>
   );

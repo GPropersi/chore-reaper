@@ -43,7 +43,8 @@ export default function NavBar({
               aria-label="Household"
               value={currentHouseholdId}
               onChange={(e) => onSwitchHousehold(Number(e.target.value))}
-              className="bg-gray-800 text-gray-200 text-sm rounded px-2 py-1 mr-2"
+              // 16px below sm avoids iOS Safari's zoom-on-focus for <select>.
+              className="bg-gray-800 text-gray-200 text-base sm:text-sm rounded px-2 py-1 mr-2"
             >
               {memberships.map((m) => (
                 <option key={m.householdId} value={m.householdId}>

@@ -94,7 +94,8 @@ export default function RoomsSection({ rooms, onRoomsChange }: RoomsSectionProps
           onChange={(e) => setNewRoomName(e.target.value)}
           placeholder="New room name"
           aria-label="New room name"
-          className="bg-gray-700 text-white rounded px-3 py-2 text-sm flex-1"
+          // 16px below sm avoids iOS Safari's zoom-on-focus.
+          className="bg-gray-700 text-white rounded px-3 py-2 text-base sm:text-sm flex-1"
         />
         <button
           type="submit"
@@ -119,7 +120,8 @@ export default function RoomsSection({ rooms, onRoomsChange }: RoomsSectionProps
                 }}
                 autoFocus
                 aria-label={`Rename ${room.name}`}
-                className="bg-gray-700 text-white rounded px-2 py-1 text-sm"
+                // 16px below sm avoids iOS Safari's zoom-on-focus.
+                className="bg-gray-700 text-white rounded px-2 py-1 text-base sm:text-sm"
               />
             ) : (
               <button
