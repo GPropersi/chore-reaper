@@ -59,46 +59,40 @@ export default function ChoreTimerBar({
   const [isOpen, setIsOpen] = useState(false);
 
   const swipingRef = useRef(false);
-  const justOpenedRef = useRef(false);
+  const justCommittedRef = useRef(false);
   const barRef = useRef<HTMLDivElement>(null);
   const editButtonRef = useRef<HTMLButtonElement>(null);
   const deleteButtonRef = useRef<HTMLButtonElement>(null);
 
-  function snapBack() {
+  // Snaps to whichever state (open/closed) is passed in — used both to
+  // commit a completed gesture and to revert an abandoned one back to
+  // wherever it already was (open or closed), so the same function works
+  // for both directions instead of always resetting to closed.
+  function animateTo(nextOpen: boolean) {
     const el = barRef.current;
     if (el) {
       el.style.transition = 'transform 150ms ease-out';
-      el.style.transform = '';
+      el.style.transform = nextOpen ? `translateX(-${openOffset}px)` : '';
     }
     for (const btn of [editButtonRef.current, deleteButtonRef.current]) {
       if (!btn) continue;
       btn.style.transition = 'opacity 150ms ease-out';
-      btn.style.opacity = '0';
+      btn.style.opacity = nextOpen ? '1' : '0';
     }
   }
 
-  function open() {
+  function commitOpen() {
     setIsOpen(true);
-    const el = barRef.current;
-    if (el) {
-      el.style.transition = 'transform 150ms ease-out';
-      el.style.transform = `translateX(-${openOffset}px)`;
-    }
-    for (const btn of [editButtonRef.current, deleteButtonRef.current]) {
-      if (!btn) continue;
-      btn.style.transition = 'opacity 150ms ease-out';
-      btn.style.opacity = '1';
-    }
+    animateTo(true);
   }
 
-  function closeSwipe() {
+  function commitClose() {
     setIsOpen(false);
-    snapBack();
+    animateTo(false);
   }
 
   const { ref: attachSwipeRef, ...swipeHandlers } = useSwipeable({
     onSwipeStart: () => {
-      if (isOpen) return;
       const el = barRef.current;
       if (el) el.style.transition = 'none';
       for (const btn of [editButtonRef.current, deleteButtonRef.current]) {
@@ -106,47 +100,66 @@ export default function ChoreTimerBar({
       }
     },
     onSwiping: ({ deltaX, dir }: SwipeEventData) => {
-      // Once open, further drags are ignored — tap a revealed button or tap
-      // the row to close, rather than fighting the anchored position.
-      // Swiping right does nothing — only left reveals the action buttons.
-      if (isOpen || dir !== 'Left') return;
       const el = barRef.current;
       if (!el) return;
-      const clamped = Math.max(-SWIPE_TRIGGER_DISTANCE, Math.min(SWIPE_TRIGGER_DISTANCE, deltaX));
-      el.style.transform = `translateX(${clamped}px)`;
-
-      // Opacity ramps with drag distance so the buttons preview the reveal
-      // instead of appearing abruptly once the swipe commits.
-      const progress = Math.min(1, Math.abs(clamped) / SWIPE_TRIGGER_DISTANCE);
-      if (deleteButtonRef.current) deleteButtonRef.current.style.opacity = String(progress);
-      if (editButtonRef.current) editButtonRef.current.style.opacity = String(progress);
+      if (!isOpen) {
+        // Closed: only a left-swipe previews opening.
+        if (dir !== 'Left') return;
+        const clamped = Math.max(-SWIPE_TRIGGER_DISTANCE, Math.min(0, deltaX));
+        el.style.transform = `translateX(${clamped}px)`;
+        const progress = Math.min(1, Math.abs(clamped) / SWIPE_TRIGGER_DISTANCE);
+        if (deleteButtonRef.current) deleteButtonRef.current.style.opacity = String(progress);
+        if (editButtonRef.current) editButtonRef.current.style.opacity = String(progress);
+      } else {
+        // Open: only a right-swipe (swiping back) previews closing. This is
+        // a real gesture handled here, not a fallback onto the native click
+        // that fires after release — that only happens reliably for mouse
+        // input. Touch browsers suppress the synthetic click after an
+        // actual drag, so relying on a tap-only close left iOS with no way
+        // to swipe a row shut once opened.
+        if (dir !== 'Right') return;
+        const dragged = Math.max(0, Math.min(SWIPE_TRIGGER_DISTANCE, deltaX));
+        const position = Math.min(0, -openOffset + dragged);
+        el.style.transform = `translateX(${position}px)`;
+        const remaining = String(1 - Math.min(1, dragged / SWIPE_TRIGGER_DISTANCE));
+        if (deleteButtonRef.current) deleteButtonRef.current.style.opacity = remaining;
+        if (editButtonRef.current) editButtonRef.current.style.opacity = remaining;
+      }
     },
     onSwipedLeft: () => {
       if (isOpen) return;
       swipingRef.current = true;
       if (isSimulating) return;
-      justOpenedRef.current = true;
-      open();
+      justCommittedRef.current = true;
+      commitOpen();
+    },
+    onSwipedRight: () => {
+      if (!isOpen) return;
+      swipingRef.current = true;
+      justCommittedRef.current = true;
+      commitClose();
     },
     onTouchStartOrOnMouseDown: () => {
       swipingRef.current = false;
     },
     onTouchEndOrOnMouseUp: () => {
-      // onSwipedLeft and this both fire on the same release — skip the
-      // reset this one time so it doesn't immediately undo the open we
-      // just committed to above.
-      if (justOpenedRef.current) {
-        justOpenedRef.current = false;
+      // onSwiped(Dir) and this both fire on the same release — skip the
+      // reset this one time so it doesn't immediately undo the commit we
+      // just made above.
+      if (justCommittedRef.current) {
+        justCommittedRef.current = false;
         return;
       }
-      if (!isOpen) snapBack();
+      // Gesture didn't cross the threshold — revert to wherever it already
+      // was (open or closed), not always back to closed.
+      animateTo(isOpen);
     },
     delta: SWIPE_TRIGGER_DISTANCE,
     trackMouse: true,
     // Passive touch listeners (the default when this is false) let iOS
     // Safari's own scroll/gesture recognizer claim the touch sequence before
-    // onSwipedLeft ever fires — true forces a non-passive listener so this
-    // element can actually win the gesture on iOS.
+    // onSwipedLeft/onSwipedRight ever fire — true forces a non-passive
+    // listener so this element can actually win the gesture on iOS.
     preventScrollOnSwipe: true,
   });
 
@@ -157,7 +170,7 @@ export default function ChoreTimerBar({
       return;
     }
     if (isOpen) {
-      closeSwipe();
+      commitClose();
       return;
     }
     onComplete(chore.id, new Date());
@@ -166,14 +179,14 @@ export default function ChoreTimerBar({
   function handleDeleteTap(e: React.MouseEvent) {
     e.stopPropagation();
     if (isSimulating) return;
-    closeSwipe();
+    commitClose();
     onDelete(chore.id);
   }
 
   function handleEditTap(e: React.MouseEvent) {
     e.stopPropagation();
     if (isSimulating || !onEdit) return;
-    closeSwipe();
+    commitClose();
     onEdit(chore.id);
   }
 
