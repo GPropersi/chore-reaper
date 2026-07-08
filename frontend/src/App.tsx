@@ -10,13 +10,13 @@ type Membership = {
   householdId: number;
   householdName: string;
   householdTimezone: string;
-  role: 'admin' | 'user';
 };
 
 type Me = {
   id: number;
   email: string;
   timezone: string;
+  isAdmin: boolean;
   memberships: Membership[];
   currentHouseholdId: number;
 };
@@ -181,6 +181,7 @@ function AdminRoute({
       householdId={currentMembership.householdId}
       householdTimezone={currentMembership.householdTimezone}
       onHouseholdTimezoneChange={onHouseholdTimezoneChange}
+      isAdmin={me.isAdmin}
     />
   );
 }
@@ -202,7 +203,7 @@ function App() {
               // reloads household-scoped data instead of needing bespoke
               // invalidation.
               key={me?.currentHouseholdId}
-              isAdmin={currentMembership?.role === 'admin'}
+              isAdmin={me?.isAdmin ?? false}
               memberships={me?.memberships ?? []}
               currentHouseholdId={me?.currentHouseholdId}
               onSwitchHousehold={switchHousehold}

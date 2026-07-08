@@ -19,12 +19,12 @@ const meResponse = {
   id: 1,
   email: 'a@example.com',
   timezone: 'Asia/Tokyo',
+  isAdmin: false,
   memberships: [
     {
       householdId: 1,
       householdName: 'Household A',
       householdTimezone: 'America/New_York',
-      role: 'user' as const,
     },
   ],
   currentHouseholdId: 1,
@@ -42,6 +42,9 @@ afterEach(() => {
   vi.unstubAllGlobals();
   localStorage.clear();
   setCurrentHouseholdId(null);
+  // Some tests navigate directly via the History API — reset the URL so
+  // that state never leaks into the next test.
+  window.history.pushState({}, '', '/');
   cleanup();
 });
 
@@ -149,10 +152,7 @@ describe('App', () => {
 
   it('navigates back to Home when a room tab is clicked while on the Admin page', async () => {
     const user = userEvent.setup();
-    const adminMeResponse = {
-      ...meResponse,
-      memberships: [{ ...meResponse.memberships[0], role: 'admin' as const }],
-    };
+    const adminMeResponse = { ...meResponse, isAdmin: true };
     vi.stubGlobal(
       'fetch',
       vi.fn((input: RequestInfo | URL) => {
@@ -175,6 +175,7 @@ describe('App', () => {
           });
         }
         if (url === '/api/members') return jsonResponse({ success: true, data: [] });
+        if (url === '/api/admin/users') return jsonResponse({ success: true, data: [] });
         if (url === '/api/rooms') return jsonResponse(roomsResponse);
         throw new Error(`Unhandled fetch: ${url}`);
       }),
@@ -193,19 +194,76 @@ describe('App', () => {
     expect(screen.queryByRole('heading', { name: 'Members' })).not.toBeInTheDocument();
   });
 
+  describe('admin users directory', () => {
+    it('renders the Users directory at the bottom of the Admin page for an admin', async () => {
+      const user = userEvent.setup();
+      const adminMeResponse = { ...meResponse, isAdmin: true };
+      vi.stubGlobal(
+        'fetch',
+        vi.fn((input: RequestInfo | URL) => {
+          const url = typeof input === 'string' ? input : input.toString();
+          if (url === '/api/me') return jsonResponse(adminMeResponse);
+          if (url === '/api/chores') return jsonResponse({ success: true, data: [] });
+          if (url === '/api/rooms') return jsonResponse(roomsResponse);
+          if (url === '/api/members') return jsonResponse({ success: true, data: [] });
+          if (url === '/api/admin/users') {
+            return jsonResponse({
+              success: true,
+              data: [
+                {
+                  id: 1,
+                  email: 'a@example.com',
+                  timezone: 'Asia/Tokyo',
+                  isAdmin: true,
+                  households: [{ id: 1, name: 'Household A' }],
+                },
+              ],
+            });
+          }
+          throw new Error(`Unhandled fetch: ${url}`);
+        }),
+      );
+
+      render(<App />);
+      await user.click(await screen.findByTestId('admin-nav-link'));
+
+      expect(await screen.findByRole('heading', { name: 'Users' })).toBeInTheDocument();
+      expect(await screen.findByText('a@example.com')).toBeInTheDocument();
+    });
+
+    it('does not render the Users directory (or fetch it) for a non-admin', async () => {
+      const user = userEvent.setup();
+      vi.stubGlobal(
+        'fetch',
+        vi.fn((input: RequestInfo | URL) => {
+          const url = typeof input === 'string' ? input : input.toString();
+          if (url === '/api/me') return jsonResponse(meResponse);
+          if (url === '/api/chores') return jsonResponse({ success: true, data: [] });
+          if (url === '/api/rooms') return jsonResponse(roomsResponse);
+          if (url === '/api/members') return jsonResponse({ success: true, data: [] });
+          throw new Error(`Unhandled fetch: ${url}`);
+        }),
+      );
+
+      render(<App />);
+      await user.click(await screen.findByTestId('admin-nav-link'));
+
+      await screen.findByRole('heading', { name: 'Members' });
+      expect(screen.queryByRole('heading', { name: 'Users' })).not.toBeInTheDocument();
+    });
+  });
+
   describe('multi-household membership', () => {
     const multiHouseholdMeResponse = {
       id: 1,
       email: 'a@example.com',
       timezone: 'UTC',
+      // isAdmin is global, not per-household — a single value for the whole
+      // fixture, unlike the old per-membership role that could differ.
+      isAdmin: true,
       memberships: [
-        {
-          householdId: 1,
-          householdName: 'Household A',
-          householdTimezone: 'UTC',
-          role: 'user' as const,
-        },
-        { householdId: 2, householdName: 'Household B', householdTimezone: 'UTC', role: 'admin' as const },
+        { householdId: 1, householdName: 'Household A', householdTimezone: 'UTC' },
+        { householdId: 2, householdName: 'Household B', householdTimezone: 'UTC' },
       ],
       currentHouseholdId: 1,
     };

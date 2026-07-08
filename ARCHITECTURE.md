@@ -36,11 +36,12 @@ backend/         Hono API — Cloudflare Worker
   src/
     app.ts               Route mounting + middleware wiring (the whole app's shape, read this first)
     index.ts              Worker entrypoint (just re-exports app.ts's default)
-    routes/                One file per resource: chores, rooms, households, members, me
+    routes/                One file per resource: chores, rooms, households, members, me, admin
     middleware/
       access-auth.ts       Verifies the Cf-Access-Jwt-Assertion JWT against Cloudflare's JWKS
-      household-scope.ts   Resolves verified email -> user -> household membership -> role
-    chores.ts, rooms.ts, households.ts, members.ts   Data-access/business-logic layer the routes call into
+      household-scope.ts   Resolves verified email -> user -> household membership -> isAdmin
+      require-global-admin.ts   Lighter chain for /api/admin/* — no household required
+    chores.ts, rooms.ts, households.ts, members.ts, admin-users.ts   Data-access/business-logic layer the routes call into
     access-allowlist.ts    Calls the Cloudflare Access API to auto-grant new members
     bootstrap-admin.ts, seed-mock-chores.ts   Logic behind the one-off scripts in scripts/
     types.ts               Hono AppEnv (Bindings + Variables) shared across the backend
@@ -53,7 +54,7 @@ frontend/         React SPA — Cloudflare Pages
   src/
     App.tsx                 Routing (react-router), top-level data loading (useMe, useRooms)
     components/
-      admin/                 Admin panel: household settings, members, rooms
+      admin/                 Admin panel: household settings, members, rooms, all-users directory
       chore/                 Chore list/view/timer/completion UI
       form/                   Chore creation/edit forms
       nav/                    Nav bar, room tabs, date navigation
@@ -87,8 +88,12 @@ scripts/           Root-level scripts (git hooks installer)
      closed (401) on any verification error.
    - `householdScope` (`middleware/household-scope.ts`) — looks up the user by email, loads their
      household memberships, resolves which household this request is scoped to (via `X-Household-Id`
-     header, or the lowest-id membership if absent/first login), sets `userId` / `householdId` / `role`
-     / `timezone` on the context.
+     header, or the lowest-id membership if absent/first login), sets `userId` / `householdId` /
+     `isAdmin` / `timezone` on the context.
+   - `requireGlobalAdmin` (`middleware/require-global-admin.ts`) — a separate, lighter chain for
+     `/api/admin/*` (currently just the all-users directory): looks up `is_admin` by email and 403s if
+     false, without requiring any household membership. Deliberately not layered on `householdScope`,
+     since a global admin must be able to reach admin-only views even with zero households of their own.
 5. Route handler (`routes/*.ts`) calls into the corresponding data-access module (`chores.ts`,
    `rooms.ts`, etc.), which always filters/writes by `household_id` — this is the entire tenant-isolation
    mechanism (see [Multi-tenancy](#multi-tenancy--auth-model)).
@@ -102,17 +107,26 @@ scripts/           Root-level scripts (git hooks installer)
   audience are verified. `access-auth.ts`'s in-memory JWKS cache means the Worker never round-trips to
   Cloudflare per-request for keys, just for the initial fetch/key rotation.
 - **Tenant = household**: `households` table. A user (`users`) can belong to multiple households via
-  `household_members` (role: `admin` | `user` per household — a user can be an admin of one household
-  and a plain user of another).
+  `household_members` — a pure join table (user × household), no role. Households only track
+  membership; there's no per-household admin/user distinction.
+- **Admin is global, not per-household**: `users.is_admin` is a single boolean on the account itself —
+  the app has users and admins; households just have members. (This used to be `household_members.role`,
+  meaning the same person could be admin of one household and a plain member of another — migration
+  `0006` collapsed that into one global flag, seeding `is_admin = 1` for anyone who was admin of at
+  least one household at the time.)
 - **Scoping**: every table that holds tenant data (`chores`, `rooms`) carries `household_id`. Every
   data-access function takes `householdId` as a parameter sourced from `c.var.householdId` (set by
   `household-scope.ts`), never from client-supplied body/query data — this is the load-bearing invariant
   that keeps households isolated. `households.patch('/:id')` re-validates the path param against
   `c.var.householdId` rather than trusting it, for the same reason.
 - **Admin-gating**: mostly enforced inside individual functions rather than as blanket middleware — e.g.
-  `addHouseholdMember` only requires `role === 'admin'` when the target email has no existing account;
+  `addHouseholdMember` only requires `callerIsAdmin` when the target email has no existing account;
   adding an already-registered user to a household is open to any member. See the comment in
-  `backend/src/app.ts` above the `/api/members` mount.
+  `backend/src/app.ts` above the `/api/members` mount. The one exception is `/api/admin/*`
+  (`routes/admin.ts`), which is admin-gated as blanket middleware (`requireGlobalAdmin`) since everything
+  under it is inherently admin-only, cross-household territory — currently just `GET /api/admin/users`,
+  a read-only directory of every user in the app and which household(s) they belong to, rendered at the
+  bottom of the frontend's Admin page (`AdminPanel.tsx` → `UsersDirectory.tsx`) only when `isAdmin` is true.
 - **Auto-provisioning Access**: when a new member is added, `access-allowlist.ts` calls the Cloudflare
   Access API to add their email to the reusable Access policy automatically. This is best-effort — a
   failure degrades to a `warning` in the API response telling the admin to add the email manually in the
@@ -127,12 +141,17 @@ application-level (`household_id` columns), not per-tenant databases.
   `npm run migrate:local` (Miniflare-local) / `npm run migrate:remote` (real production D1) from
   `backend/`. Migration files are numbered and immutable once merged to `main` — corrections are new
   migrations, never edits to old ones (see the extensive rationale comments in
-  `0004_rename_org_to_household.sql` and `0005_rename_member_role_to_user.sql` for what that discipline
-  looks like against live data).
-- **Core tables**: `households`, `users`, `household_members` (join table: user × household → role),
-  `rooms`, `chores`. Naming history: this schema was originally "organizations" (0001–0003), renamed to
-  "households" in 0004, and the member role vocabulary (`member` → `user`) was renamed in 0005 — expect
-  to see that lineage in migration comments if you're tracing schema history.
+  `0004_rename_org_to_household.sql`, `0005_rename_member_role_to_user.sql`, and
+  `0006_global_admin_users_cleanup.sql` for what that discipline looks like against live data, including
+  the snapshot-then-rebuild dance SQLite's FK/CHECK-constraint limitations force on every one of these).
+- **Core tables**: `households`, `users` (`is_admin` is the only global per-account flag —
+  `households`/`chores`/`rooms` scoping is entirely via `household_id`), `household_members` (pure join
+  table: user × household membership, no role), `rooms`, `chores`. Naming history: this schema was
+  originally "organizations" (0001–0003), renamed to "households" in 0004, the member role vocabulary
+  (`member` → `user`) was renamed in 0005, and 0006 moved admin/user from a per-household
+  `household_members.role` to a global `users.is_admin` while finally dropping the legacy
+  `users.household_id`/`role`/`invited_by` columns that 0003 had promised (but never delivered) to clean
+  up — expect to see that lineage in migration comments if you're tracing schema history.
 - **Local dev D1** is a Miniflare-emulated SQLite file, fully disposable — `npm run migrate:local` any
   time to reset/catch up.
 - **Tests** run against a real (in-memory, per-test) D1 via `@cloudflare/vitest-pool-workers` — not
@@ -239,23 +258,24 @@ mean this can never be offline-_capable_, only offline-_tolerant_). Two mechanis
 
 ## Where to look for X
 
-| I need to...                                                      | Look at                                                                                                |
-| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Understand the whole backend's route/middleware shape at a glance | `backend/src/app.ts`                                                                                   |
-| Add or change an API endpoint                                     | `backend/src/routes/<resource>.ts` + its data-access sibling (e.g. `backend/src/chores.ts`)            |
-| Change auth/JWT verification behavior                             | `backend/src/middleware/access-auth.ts`                                                                |
-| Change how household scoping/switching resolves                   | `backend/src/middleware/household-scope.ts`                                                            |
-| Add a DB column/table                                             | New file in `backend/migrations/` — never edit a merged one                                            |
-| Change the shared API response/entity shapes                      | `types/SharedTypes.d.ts`                                                                               |
-| Change the single fetch entrypoint (headers, preview mocking)     | `frontend/src/utils/api.ts`                                                                            |
-| Change routing/top-level data loading                             | `frontend/src/App.tsx`                                                                                 |
-| Change the offline write queue                                    | `frontend/src/outbox/`                                                                                 |
-| Run local dev                                                     | `/run-dev` skill, or `npm run dev` at repo root                                                        |
-| Push a branch / open a PR as the bot                              | `/bot-push` skill (`c4i-claude-bot[bot]`, standing default per project instructions — don't ask first) |
-| Understand the cloud-vs-local tradeoff rationale                  | `TRADEOFFS.md`                                                                                         |
-| Check the day's work log                                          | `changelog/MM-DD-YYYY-changelog.md`                                                                    |
-| Change CI/CD                                                      | `.github/workflows/ci.yml`                                                                             |
-| Change Worker routing/bindings/secrets config                     | `backend/wrangler.toml`                                                                                |
+| I need to...                                                      | Look at                                                                                                                                                           |
+| ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Understand the whole backend's route/middleware shape at a glance | `backend/src/app.ts`                                                                                                                                              |
+| Add or change an API endpoint                                     | `backend/src/routes/<resource>.ts` + its data-access sibling (e.g. `backend/src/chores.ts`)                                                                       |
+| Change auth/JWT verification behavior                             | `backend/src/middleware/access-auth.ts`                                                                                                                           |
+| Change how household scoping/switching resolves                   | `backend/src/middleware/household-scope.ts`                                                                                                                       |
+| Change global admin status/gating or the all-users directory      | `backend/src/middleware/require-global-admin.ts`, `backend/src/admin-users.ts`, `backend/src/routes/admin.ts`, `frontend/src/components/admin/UsersDirectory.tsx` |
+| Add a DB column/table                                             | New file in `backend/migrations/` — never edit a merged one                                                                                                       |
+| Change the shared API response/entity shapes                      | `types/SharedTypes.d.ts`                                                                                                                                          |
+| Change the single fetch entrypoint (headers, preview mocking)     | `frontend/src/utils/api.ts`                                                                                                                                       |
+| Change routing/top-level data loading                             | `frontend/src/App.tsx`                                                                                                                                            |
+| Change the offline write queue                                    | `frontend/src/outbox/`                                                                                                                                            |
+| Run local dev                                                     | `/run-dev` skill, or `npm run dev` at repo root                                                                                                                   |
+| Push a branch / open a PR as the bot                              | `/bot-push` skill (`c4i-claude-bot[bot]`, standing default per project instructions — don't ask first)                                                            |
+| Understand the cloud-vs-local tradeoff rationale                  | `TRADEOFFS.md`                                                                                                                                                    |
+| Check the day's work log                                          | `changelog/MM-DD-YYYY-changelog.md`                                                                                                                               |
+| Change CI/CD                                                      | `.github/workflows/ci.yml`                                                                                                                                        |
+| Change Worker routing/bindings/secrets config                     | `backend/wrangler.toml`                                                                                                                                           |
 
 ## Conventions worth knowing
 

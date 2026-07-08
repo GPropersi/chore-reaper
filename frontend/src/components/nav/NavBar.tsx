@@ -65,7 +65,9 @@ export default function NavBar({
           ))}
         </div>
         {/* Open to every household member now, not admin-only — the label
-            just reflects whether this viewer also has admin privileges. */}
+            just reflects whether this viewer also has admin privileges. The
+            all-users directory lives inside this page too, at the bottom,
+            visible only to global admins — not a separate nav entry. */}
         <NavLink
           to="/admin"
           data-testid="admin-nav-link"

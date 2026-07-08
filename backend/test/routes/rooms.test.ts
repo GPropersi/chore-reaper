@@ -36,12 +36,11 @@ beforeEach(async () => {
       'Kitchen',
     ),
   ]);
-  await seedHouseholdMember({ id: 1, householdId: HOUSEHOLD_A, email: 'admin-a@example.com', role: 'admin' });
+  await seedHouseholdMember({ id: 1, householdId: HOUSEHOLD_A, email: 'admin-a@example.com', isAdmin: true });
   await seedHouseholdMember({
     id: 2,
     householdId: HOUSEHOLD_A,
     email: 'member-a@example.com',
-    role: 'user',
   });
 });
 

@@ -25,3 +25,16 @@ export interface ApiResponse<T> {
   error?: string;
   warning?: string;
 }
+
+export interface AdminUserHousehold {
+  id: number;
+  name: string;
+}
+
+export interface AdminUser {
+  id: number;
+  email: string;
+  timezone: string | null;
+  isAdmin: boolean;
+  households: AdminUserHousehold[];
+}

@@ -5,13 +5,14 @@ import StatusBanner from '../common/StatusBanner';
 import AddMemberModal, { type AddMemberInput } from './AddMemberModal';
 import RoomsSection from './RoomsSection';
 import HouseholdSection from './HouseholdSection';
+import UsersDirectory from './UsersDirectory';
 import { apiFetch } from '../../utils/api';
 
 export type Member = {
   id: number;
   householdId: number;
   email: string;
-  role: 'admin' | 'user';
+  isAdmin: boolean;
   timezone: string | null;
 };
 
@@ -23,6 +24,7 @@ type AdminPanelProps = {
   householdId: number;
   householdTimezone: string;
   onHouseholdTimezoneChange: (timezone: string) => void;
+  isAdmin: boolean;
 };
 
 export default function AdminPanel({
@@ -31,6 +33,7 @@ export default function AdminPanel({
   householdId,
   householdTimezone,
   onHouseholdTimezoneChange,
+  isAdmin,
 }: AdminPanelProps) {
   const [members, setMembers] = useState<Member[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -56,7 +59,7 @@ export default function AdminPanel({
       setIsAddOpen(false);
     } else {
       // Keep the modal open on failure (e.g. already a member of this household)
-      // so the admin can see what went wrong and correct the email/role.
+      // so the admin can see what went wrong and correct the email.
       setWarning(body.error ?? 'Could not add member');
     }
   }
@@ -101,7 +104,7 @@ export default function AdminPanel({
             <div>
               <div className="flex items-center gap-2">
                 <p className="text-white text-sm">{member.email}</p>
-                {member.role === 'admin' && (
+                {member.isAdmin && (
                   <span
                     data-testid="admin-badge"
                     className="text-[10px] font-semibold uppercase tracking-wide text-indigo-400 bg-indigo-900/50 px-2 py-0.5 rounded-full"
@@ -132,6 +135,10 @@ export default function AdminPanel({
           onCancel={() => setPendingDeleteId(null)}
         />
       )}
+
+      {/* Global-admin-only, unlike everything else on this page — every
+          other section here is open to any household member. */}
+      {isAdmin && <UsersDirectory />}
     </div>
   );
 }

@@ -13,7 +13,7 @@ function testApp(householdId: number) {
   app.use('*', async (c, next) => {
     c.set('userId', 1);
     c.set('householdId', householdId);
-    c.set('role', 'admin');
+    c.set('isAdmin', true);
     c.set('timezone', null);
     await next();
   });

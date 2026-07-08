@@ -14,7 +14,6 @@ test('non-admin sees a plain "House" tab, can view it, but cannot add a brand-ne
   await page.getByRole('button', { name: 'Add Member' }).click();
   const modal = page.getByTestId('add-member-modal-backdrop');
   await modal.getByLabel('Email').fill('brand-new-e2e@example.com');
-  await modal.getByLabel('Role').selectOption('user');
   await modal.getByRole('button', { name: 'Save' }).click();
 
   await expect(page.getByText(/ask a household admin/i)).toBeVisible();
@@ -35,7 +34,6 @@ test('admin can add a member and see them appear in the list', async ({ page }) 
   // with its own "Save" button, so an unscoped locator is ambiguous.
   const modal = page.getByTestId('add-member-modal-backdrop');
   await modal.getByLabel('Email').fill('new-e2e-member@example.com');
-  await modal.getByLabel('Role').selectOption('user');
   await modal.getByRole('button', { name: 'Save' }).click();
 
   // Scoped to the member list, not a bare page-wide getByText: with fixture
