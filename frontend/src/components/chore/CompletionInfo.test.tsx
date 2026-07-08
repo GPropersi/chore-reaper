@@ -14,7 +14,7 @@ describe('CompletionInfo', () => {
     // UTC-11: the same instant is still 2026-01-01 locally there.
     expect(screen.getByText(/Jan 1 2026/)).toBeInTheDocument();
 
-    // daysSince is scoring-driven (org-timezone based) and must stay put regardless
+    // daysSince is scoring-driven (household-timezone based) and must stay put regardless
     // of which display timezone is passed in.
     expect(screen.getByText('3 days ago')).toBeInTheDocument();
   });

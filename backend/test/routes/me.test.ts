@@ -3,24 +3,28 @@ import { env } from 'cloudflare:workers';
 import app from '../../src/app.js';
 import { signTestJwt } from '../helpers/sign-test-jwt.js';
 import { stubAccessJwks, testEnv, TEST_ACCESS_AUD } from '../helpers/access-test-env.js';
+import { seedHouseholdMember, seedAdditionalMembership } from '../helpers/seed.js';
 
 beforeEach(async () => {
   stubAccessJwks();
   await env.DB.exec('DELETE FROM chores');
+  await env.DB.exec('DELETE FROM household_members');
   await env.DB.exec('DELETE FROM users');
-  await env.DB.exec('DELETE FROM organizations');
+  await env.DB.exec('DELETE FROM households');
   await env.DB.batch([
-    env.DB.prepare('INSERT INTO organizations (id, name, timezone) VALUES (1, ?, ?)').bind(
-      'Org A',
+    env.DB.prepare('INSERT INTO households (id, name, timezone) VALUES (1, ?, ?)').bind(
+      'Household A',
       'America/New_York',
     ),
-    env.DB.prepare(
-      'INSERT INTO users (id, organization_id, email, role, timezone) VALUES (1, 1, ?, ?, ?)',
-    ).bind('admin@example.com', 'admin', 'America/Los_Angeles'),
-    env.DB.prepare(
-      'INSERT INTO users (id, organization_id, email, role, timezone) VALUES (2, 1, ?, ?, NULL)',
-    ).bind('member@example.com', 'member'),
   ]);
+  await seedHouseholdMember({
+    id: 1,
+    householdId: 1,
+    email: 'admin@example.com',
+    role: 'admin',
+    timezone: 'America/Los_Angeles',
+  });
+  await seedHouseholdMember({ id: 2, householdId: 1, email: 'member@example.com', role: 'user' });
 });
 
 afterEach(() => {
@@ -37,21 +41,49 @@ describe('GET /api/me', () => {
     expect(await res.json()).toEqual({
       id: 1,
       email: 'admin@example.com',
-      role: 'admin',
-      organizationId: 1,
-      organizationTimezone: 'America/New_York',
       timezone: 'America/Los_Angeles',
+      memberships: [
+        {
+          householdId: 1,
+          householdName: 'Household A',
+          householdTimezone: 'America/New_York',
+          role: 'admin',
+        },
+      ],
+      currentHouseholdId: 1,
     });
   });
 
-  it('falls back to organizationTimezone when the user has no personal timezone set', async () => {
+  it('falls back to the current household timezone when the user has no personal timezone set', async () => {
     const token = await signTestJwt({ email: 'member@example.com', aud: TEST_ACCESS_AUD });
 
     const res = await app.request('/api/me', { headers: { 'Cf-Access-Jwt-Assertion': token } }, testEnv());
 
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { timezone: string; organizationTimezone: string };
+    const body = (await res.json()) as { timezone: string };
     expect(body.timezone).toBe('America/New_York');
-    expect(body.organizationTimezone).toBe('America/New_York');
+  });
+
+  it('lists every household the user belongs to, with the resolved current one flagged separately', async () => {
+    await env.DB.prepare('INSERT INTO households (id, name, timezone) VALUES (2, ?, ?)')
+      .bind('Household B', 'Europe/London')
+      .run();
+    await seedAdditionalMembership(1, 2, 'user');
+
+    const token = await signTestJwt({ email: 'admin@example.com', aud: TEST_ACCESS_AUD });
+    const res = await app.request(
+      '/api/me',
+      { headers: { 'Cf-Access-Jwt-Assertion': token, 'X-Household-Id': '2' } },
+      testEnv(),
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      memberships: { householdId: number; role: string }[];
+      currentHouseholdId: number;
+    };
+    expect(body.currentHouseholdId).toBe(2);
+    expect(body.memberships.map((m) => m.householdId).sort()).toEqual([1, 2]);
+    expect(body.memberships.find((m) => m.householdId === 2)?.role).toBe('user');
   });
 });

@@ -1,11 +1,12 @@
 import type { Chore } from '../../types/SharedTypes.js';
+import { roomBelongsToHousehold } from './rooms.js';
 
 type ChoreRow = {
   id: number;
-  organization_id: number;
+  household_id: number;
   name: string;
   details: string | null;
-  room: string;
+  room_id: number;
   date_last_completed: string;
   duration: number;
   frequency: number;
@@ -24,14 +25,17 @@ export type ChoreInput = Omit<Chore, 'id' | 'dateLastCompleted'> & {
 };
 
 export type MutationResult =
-  { status: 'ok'; chore: ChoreWire } | { status: 'conflict' } | { status: 'not_found' };
+  | { status: 'ok'; chore: ChoreWire }
+  | { status: 'conflict' }
+  | { status: 'not_found' }
+  | { status: 'invalid_room' };
 
 function rowToChore(row: ChoreRow): ChoreWire {
   return {
     id: row.id,
     name: row.name,
     details: row.details ?? null,
-    room: row.room,
+    roomId: row.room_id,
     dateLastCompleted: row.date_last_completed,
     duration: row.duration,
     frequency: row.frequency,
@@ -45,33 +49,39 @@ function dateLastCompletedString(value: Chore['dateLastCompleted'] | string): st
   return value instanceof Date ? value.toISOString() : String(value);
 }
 
-export async function getAllChores(db: D1Database, organizationId: number): Promise<ChoreWire[]> {
+export async function getAllChores(db: D1Database, householdId: number): Promise<ChoreWire[]> {
   const result = await db
-    .prepare('SELECT * FROM chores WHERE organization_id = ? ORDER BY id')
-    .bind(organizationId)
+    .prepare('SELECT * FROM chores WHERE household_id = ? ORDER BY id')
+    .bind(householdId)
     .all<ChoreRow>();
   return result.results.map(rowToChore);
 }
 
+export type CreateChoreResult = { status: 'ok'; chore: ChoreWire } | { status: 'invalid_room' };
+
 export async function createChore(
   db: D1Database,
-  organizationId: number,
+  householdId: number,
   input: ChoreInput,
   clientId?: string,
-): Promise<ChoreWire> {
+): Promise<CreateChoreResult> {
+  if (!(await roomBelongsToHousehold(db, householdId, input.roomId))) {
+    return { status: 'invalid_room' };
+  }
+
   let lastRowId: number | bigint;
   try {
     const result = await db
       .prepare(
         `INSERT INTO chores
-          (organization_id, name, details, room, date_last_completed, duration, frequency, urgency, long_term_task, version, client_id)
+          (household_id, name, details, room_id, date_last_completed, duration, frequency, urgency, long_term_task, version, client_id)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
       )
       .bind(
-        organizationId,
+        householdId,
         input.name,
         input.details ?? null,
-        input.room,
+        input.roomId,
         dateLastCompletedString(input.dateLastCompleted),
         input.duration,
         input.frequency,
@@ -84,74 +94,78 @@ export async function createChore(
   } catch (err) {
     if (!clientId || !String(err).includes('UNIQUE constraint failed')) throw err;
     const existing = await db
-      .prepare('SELECT * FROM chores WHERE organization_id = ? AND client_id = ?')
-      .bind(organizationId, clientId)
+      .prepare('SELECT * FROM chores WHERE household_id = ? AND client_id = ?')
+      .bind(householdId, clientId)
       .first<ChoreRow>();
-    return rowToChore(existing!);
+    return { status: 'ok', chore: rowToChore(existing!) };
   }
 
   const row = await db
-    .prepare('SELECT * FROM chores WHERE id = ? AND organization_id = ?')
-    .bind(lastRowId, organizationId)
+    .prepare('SELECT * FROM chores WHERE id = ? AND household_id = ?')
+    .bind(lastRowId, householdId)
     .first<ChoreRow>();
-  return rowToChore(row!);
+  return { status: 'ok', chore: rowToChore(row!) };
 }
 
-async function fetchByOrg(db: D1Database, organizationId: number, id: number): Promise<ChoreRow | null> {
+async function fetchByHousehold(db: D1Database, householdId: number, id: number): Promise<ChoreRow | null> {
   const row = await db
-    .prepare('SELECT * FROM chores WHERE id = ? AND organization_id = ?')
-    .bind(id, organizationId)
+    .prepare('SELECT * FROM chores WHERE id = ? AND household_id = ?')
+    .bind(id, householdId)
     .first<ChoreRow>();
   return row ?? null;
 }
 
 async function applyVersionedMutation(
   db: D1Database,
-  organizationId: number,
+  householdId: number,
   id: number,
   expectedVersion: number,
   run: () => Promise<D1Result>,
 ): Promise<MutationResult> {
-  const existing = await fetchByOrg(db, organizationId, id);
+  const existing = await fetchByHousehold(db, householdId, id);
   if (!existing) return { status: 'not_found' };
 
   const result = await run();
   if (result.meta.changes === 0) {
-    // Row exists in this org — the WHERE clause only excludes on a version mismatch.
+    // Row exists in this household — the WHERE clause only excludes on a version mismatch.
     return { status: 'conflict' };
   }
 
-  const row = await fetchByOrg(db, organizationId, id);
+  const row = await fetchByHousehold(db, householdId, id);
   return { status: 'ok', chore: rowToChore(row!) };
 }
 
 export async function updateChore(
   db: D1Database,
-  organizationId: number,
+  householdId: number,
   id: number,
   input: ChoreInput,
   expectedVersion: number,
 ): Promise<MutationResult> {
-  return applyVersionedMutation(db, organizationId, id, expectedVersion, () =>
+  if (!(await roomBelongsToHousehold(db, householdId, input.roomId))) {
+    return { status: 'invalid_room' };
+  }
+
+  return applyVersionedMutation(db, householdId, id, expectedVersion, () =>
     db
       .prepare(
         `UPDATE chores
-         SET name = ?, details = ?, room = ?, date_last_completed = ?,
+         SET name = ?, details = ?, room_id = ?, date_last_completed = ?,
              duration = ?, frequency = ?, urgency = ?, long_term_task = ?,
              version = version + 1
-         WHERE id = ? AND organization_id = ? AND version = ?`,
+         WHERE id = ? AND household_id = ? AND version = ?`,
       )
       .bind(
         input.name,
         input.details ?? null,
-        input.room,
+        input.roomId,
         dateLastCompletedString(input.dateLastCompleted),
         input.duration,
         input.frequency,
         input.urgency ?? null,
         input.longTermTask ? 1 : 0,
         id,
-        organizationId,
+        householdId,
         expectedVersion,
       )
       .run(),
@@ -162,11 +176,11 @@ export type CompleteResult = { status: 'ok'; chore: ChoreWire } | { status: 'not
 
 export async function completeChore(
   db: D1Database,
-  organizationId: number,
+  householdId: number,
   id: number,
   dateLastCompleted: string,
 ): Promise<CompleteResult> {
-  const existing = await fetchByOrg(db, organizationId, id);
+  const existing = await fetchByHousehold(db, householdId, id);
   if (!existing) return { status: 'not_found' };
 
   await db
@@ -174,19 +188,19 @@ export async function completeChore(
       `UPDATE chores
        SET date_last_completed = CASE WHEN date_last_completed < ? THEN ? ELSE date_last_completed END,
            version = version + 1
-       WHERE id = ? AND organization_id = ?`,
+       WHERE id = ? AND household_id = ?`,
     )
-    .bind(dateLastCompleted, dateLastCompleted, id, organizationId)
+    .bind(dateLastCompleted, dateLastCompleted, id, householdId)
     .run();
 
-  const row = await fetchByOrg(db, organizationId, id);
+  const row = await fetchByHousehold(db, householdId, id);
   return { status: 'ok', chore: rowToChore(row!) };
 }
 
-export async function deleteChore(db: D1Database, organizationId: number, id: number): Promise<boolean> {
+export async function deleteChore(db: D1Database, householdId: number, id: number): Promise<boolean> {
   const result = await db
-    .prepare('DELETE FROM chores WHERE id = ? AND organization_id = ?')
-    .bind(id, organizationId)
+    .prepare('DELETE FROM chores WHERE id = ? AND household_id = ?')
+    .bind(id, householdId)
     .run();
   return result.meta.changes > 0;
 }

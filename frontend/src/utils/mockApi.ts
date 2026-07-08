@@ -14,32 +14,54 @@ type ChoreWire = {
   id: number;
   name: string;
   details?: string | null;
-  room: string;
+  roomId: number;
   dateLastCompleted: string;
   duration: number;
   frequency: number;
   version: number;
 };
 
-type MockUser = {
+type MockMember = {
   id: number;
-  organizationId: number;
+  householdId: number;
   email: string;
-  role: 'admin' | 'member';
+  role: 'admin' | 'user';
   timezone: string | null;
 };
 
-const MOCK_ME = {
-  id: 1,
-  email: 'preview@example.com',
-  role: 'admin' as const,
-  organizationId: 1,
-  organizationTimezone: 'America/Chicago',
-  timezone: 'America/Chicago',
+type MockRoom = {
+  id: number;
+  householdId: number;
+  name: string;
 };
+
+function seedMe() {
+  return {
+    id: 1,
+    email: 'preview@example.com',
+    timezone: 'America/Chicago',
+    memberships: [
+      {
+        householdId: 1,
+        householdName: 'Preview Household',
+        householdTimezone: 'America/Chicago',
+        role: 'admin' as const,
+      },
+    ],
+    currentHouseholdId: 1,
+  };
+}
 
 function daysAgoIso(now: number, days: number): string {
   return new Date(now - days * 24 * 60 * 60 * 1000).toISOString();
+}
+
+function seedRooms(): MockRoom[] {
+  return [
+    { id: 1, householdId: 1, name: 'Living Room' },
+    { id: 2, householdId: 1, name: 'Kitchen' },
+    { id: 3, householdId: 1, name: 'Bathroom' },
+  ];
 }
 
 function seedChores(): ChoreWire[] {
@@ -48,7 +70,7 @@ function seedChores(): ChoreWire[] {
     {
       id: 1,
       name: 'Vacuum',
-      room: 'Living Room',
+      roomId: 1,
       dateLastCompleted: daysAgoIso(now, 3),
       duration: 20,
       frequency: 7,
@@ -57,7 +79,7 @@ function seedChores(): ChoreWire[] {
     {
       id: 2,
       name: 'Dishes',
-      room: 'Kitchen',
+      roomId: 2,
       dateLastCompleted: daysAgoIso(now, 0),
       duration: 5,
       frequency: 1,
@@ -66,7 +88,7 @@ function seedChores(): ChoreWire[] {
     {
       id: 3,
       name: "Clip Maple's Nails",
-      room: 'Bathroom',
+      roomId: 3,
       dateLastCompleted: daysAgoIso(now, 20),
       duration: 10,
       frequency: 18,
@@ -75,23 +97,29 @@ function seedChores(): ChoreWire[] {
   ];
 }
 
-function seedUsers(): MockUser[] {
+function seedMembers(): MockMember[] {
   return [
-    { id: 1, organizationId: 1, email: 'preview@example.com', role: 'admin', timezone: 'America/Chicago' },
-    { id: 2, organizationId: 1, email: 'roommate@example.com', role: 'member', timezone: null },
+    { id: 1, householdId: 1, email: 'preview@example.com', role: 'admin', timezone: 'America/Chicago' },
+    { id: 2, householdId: 1, email: 'roommate@example.com', role: 'user', timezone: null },
   ];
 }
 
 let chores: ChoreWire[] = seedChores();
-let users: MockUser[] = seedUsers();
+let members: MockMember[] = seedMembers();
+let rooms: MockRoom[] = seedRooms();
+let me = seedMe();
 let nextChoreId = 4;
-let nextUserId = 3;
+let nextMemberId = 3;
+let nextRoomId = 4;
 
 export function resetMockData(): void {
   chores = seedChores();
-  users = seedUsers();
+  members = seedMembers();
+  rooms = seedRooms();
+  me = seedMe();
   nextChoreId = 4;
-  nextUserId = 3;
+  nextMemberId = 3;
+  nextRoomId = 4;
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -105,13 +133,15 @@ function parseBody(init?: RequestInit): Record<string, unknown> {
 
 const CHORE_ID_RE = /^\/api\/chores\/(\d+)$/;
 const CHORE_COMPLETE_RE = /^\/api\/chores\/(\d+)\/complete$/;
-const USER_ID_RE = /^\/api\/users\/(\d+)$/;
+const MEMBER_ID_RE = /^\/api\/members\/(\d+)$/;
+const ROOM_ID_RE = /^\/api\/rooms\/(\d+)$/;
+const HOUSEHOLD_ID_RE = /^\/api\/households\/(\d+)$/;
 
 export async function mockFetch(path: string, init?: RequestInit): Promise<Response> {
   const method = (init?.method ?? 'GET').toUpperCase();
 
   if (path === '/api/me' && method === 'GET') {
-    return jsonResponse(MOCK_ME);
+    return jsonResponse(me);
   }
 
   if (path === '/api/chores' && method === 'GET') {
@@ -156,21 +186,80 @@ export async function mockFetch(path: string, init?: RequestInit): Promise<Respo
     return jsonResponse({ success: true, data: null });
   }
 
-  if (path === '/api/users' && method === 'GET') {
-    return jsonResponse({ success: true, data: users });
+  if (path === '/api/members' && method === 'GET') {
+    return jsonResponse({ success: true, data: members });
   }
-  if (path === '/api/users' && method === 'POST') {
+  if (path === '/api/members' && method === 'POST') {
     const body = parseBody(init);
-    const user = { organizationId: 1, timezone: null, ...body, id: nextUserId++ } as MockUser;
-    users = [...users, user];
-    return jsonResponse({ success: true, data: user }, 201);
+    const member = { householdId: 1, timezone: null, ...body, id: nextMemberId++ } as MockMember;
+    members = [...members, member];
+    return jsonResponse({ success: true, data: member }, 201);
   }
-  const userIdMatch = path.match(USER_ID_RE);
-  if (userIdMatch && method === 'DELETE') {
-    const id = Number(userIdMatch[1]);
-    if (!users.some((u) => u.id === id)) return jsonResponse({ success: false, error: 'not found' }, 404);
-    users = users.filter((u) => u.id !== id);
+  const memberIdMatch = path.match(MEMBER_ID_RE);
+  if (memberIdMatch && method === 'DELETE') {
+    const id = Number(memberIdMatch[1]);
+    if (!members.some((m) => m.id === id)) return jsonResponse({ success: false, error: 'not found' }, 404);
+    members = members.filter((m) => m.id !== id);
     return jsonResponse({ success: true, data: null });
+  }
+
+  if (path === '/api/rooms' && method === 'GET') {
+    return jsonResponse({ success: true, data: rooms });
+  }
+  if (path === '/api/rooms' && method === 'POST') {
+    const body = parseBody(init);
+    const name = String(body.name ?? '');
+    if (rooms.some((r) => r.name === name)) {
+      return jsonResponse({ success: false, error: 'A room with this name already exists' }, 409);
+    }
+    const room: MockRoom = { id: nextRoomId++, householdId: 1, name };
+    rooms = [...rooms, room];
+    return jsonResponse({ success: true, data: room }, 201);
+  }
+  const roomIdMatch = path.match(ROOM_ID_RE);
+  if (roomIdMatch && method === 'PUT') {
+    const id = Number(roomIdMatch[1]);
+    const existing = rooms.find((r) => r.id === id);
+    if (!existing) return jsonResponse({ success: false, error: 'not found' }, 404);
+    const body = parseBody(init);
+    const name = String(body.name ?? existing.name);
+    if (rooms.some((r) => r.id !== id && r.name === name)) {
+      return jsonResponse({ success: false, error: 'A room with this name already exists' }, 409);
+    }
+    const updated = { ...existing, name };
+    rooms = rooms.map((r) => (r.id === id ? updated : r));
+    return jsonResponse({ success: true, data: updated });
+  }
+  if (roomIdMatch && method === 'DELETE') {
+    const id = Number(roomIdMatch[1]);
+    if (!rooms.some((r) => r.id === id)) return jsonResponse({ success: false, error: 'not found' }, 404);
+    const choreCount = chores.filter((c) => c.roomId === id).length;
+    if (choreCount > 0) {
+      return jsonResponse(
+        {
+          success: false,
+          error: `${choreCount} chore(s) are still in this room — reassign or delete them first`,
+        },
+        409,
+      );
+    }
+    rooms = rooms.filter((r) => r.id !== id);
+    return jsonResponse({ success: true, data: null });
+  }
+
+  const householdIdMatch = path.match(HOUSEHOLD_ID_RE);
+  if (householdIdMatch && method === 'PATCH') {
+    const householdId = Number(householdIdMatch[1]);
+    const body = parseBody(init);
+    const current = me.memberships.find((m) => m.householdId === householdId);
+    const timezone = String(body.timezone ?? current?.householdTimezone ?? 'UTC');
+    me = {
+      ...me,
+      memberships: me.memberships.map((m) =>
+        m.householdId === householdId ? { ...m, householdTimezone: timezone } : m,
+      ),
+    };
+    return jsonResponse({ success: true, data: { id: householdId, name: 'Preview Household', timezone } });
   }
 
   return jsonResponse({ success: false, error: `mock not implemented for ${method} ${path}` }, 501);

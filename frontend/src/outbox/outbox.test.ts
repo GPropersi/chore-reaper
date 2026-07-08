@@ -3,7 +3,7 @@ import { createOutbox as createOutboxReal, type ChorePayload, type Outbox } from
 
 const chorePayload: ChorePayload = {
   name: 'Vacuum',
-  room: 'Living Room',
+  roomId: 1,
   dateLastCompleted: '2026-06-01T00:00:00.000Z',
   duration: 20,
   frequency: 7,

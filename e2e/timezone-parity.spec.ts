@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { signE2eJwt } from './sign-jwt.js';
 
-test('two same-org users, in different browser timezones with different personal display timezones, see identical chore order and colors', async ({
+test('two same-household users, in different browser timezones with different personal display timezones, see identical chore order and colors', async ({
   browser,
 }) => {
   const contextA = await browser.newContext({ timezoneId: 'Asia/Tokyo' });

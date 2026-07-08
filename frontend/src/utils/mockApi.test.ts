@@ -4,7 +4,7 @@ import { mockFetch, resetMockData } from './mockApi';
 type ChoreWire = {
   id: number;
   name: string;
-  room: string;
+  roomId: number;
   dateLastCompleted: string;
   duration: number;
   frequency: number;
@@ -20,12 +20,35 @@ beforeEach(() => {
 });
 
 describe('mockFetch: /api/me', () => {
-  it('returns a fake authenticated admin user', async () => {
+  it('returns a fake authenticated admin user with a single-household membership', async () => {
     const res = await mockFetch('/api/me');
     expect(res.status).toBe(200);
-    const me = await json<{ role: string; email: string }>(res);
-    expect(me.role).toBe('admin');
+    const me = await json<{
+      email: string;
+      currentHouseholdId: number;
+      memberships: { householdId: number; role: string }[];
+    }>(res);
     expect(me.email).toBeTruthy();
+    expect(me.memberships).toHaveLength(1);
+    expect(me.memberships[0].role).toBe('admin');
+    expect(me.currentHouseholdId).toBe(me.memberships[0].householdId);
+  });
+});
+
+describe('mockFetch: PATCH /api/households/:id', () => {
+  it('updates the timezone and reflects it in a subsequent GET /api/me', async () => {
+    const res = await mockFetch('/api/households/1', {
+      method: 'PATCH',
+      body: JSON.stringify({ timezone: 'Europe/London' }),
+    });
+    expect(res.status).toBe(200);
+    const body = await json<{ data: { timezone: string } }>(res);
+    expect(body.data.timezone).toBe('Europe/London');
+
+    const meRes = await json<{ memberships: { householdId: number; householdTimezone: string }[] }>(
+      await mockFetch('/api/me'),
+    );
+    expect(meRes.memberships.find((m) => m.householdId === 1)?.householdTimezone).toBe('Europe/London');
   });
 });
 
@@ -42,7 +65,7 @@ describe('mockFetch: /api/chores', () => {
       method: 'POST',
       body: JSON.stringify({
         name: 'Mop Floors',
-        room: 'Kitchen',
+        roomId: 2,
         dateLastCompleted: '2026-07-01T00:00:00.000Z',
         duration: 15,
         frequency: 3,
@@ -67,7 +90,7 @@ describe('mockFetch: /api/chores', () => {
       method: 'PUT',
       body: JSON.stringify({
         name: 'Renamed Chore',
-        room: target.room,
+        roomId: target.roomId,
         dateLastCompleted: target.dateLastCompleted,
         duration: target.duration,
         frequency: target.frequency,
@@ -111,34 +134,82 @@ describe('mockFetch: /api/chores', () => {
   });
 });
 
-describe('mockFetch: /api/users', () => {
+describe('mockFetch: /api/members', () => {
   it('GET returns a non-empty seeded list', async () => {
-    const res = await mockFetch('/api/users');
+    const res = await mockFetch('/api/members');
     const body = await json<{ success: boolean; data: unknown[] }>(res);
     expect(body.success).toBe(true);
     expect(body.data.length).toBeGreaterThan(0);
   });
 
-  it('POST creates a user and it appears in a subsequent GET', async () => {
-    const createRes = await mockFetch('/api/users', {
+  it('POST creates a member and it appears in a subsequent GET', async () => {
+    const createRes = await mockFetch('/api/members', {
       method: 'POST',
-      body: JSON.stringify({ email: 'preview@example.com', role: 'member' }),
+      body: JSON.stringify({ email: 'preview@example.com', role: 'user' }),
     });
     expect(createRes.status).toBe(201);
 
-    const listRes = await mockFetch('/api/users');
+    const listRes = await mockFetch('/api/members');
     const list = await json<{ data: { email: string }[] }>(listRes);
-    expect(list.data.map((u) => u.email)).toContain('preview@example.com');
+    expect(list.data.map((m) => m.email)).toContain('preview@example.com');
   });
 
-  it('DELETE removes a user', async () => {
-    const before = await json<{ data: { id: number }[] }>(await mockFetch('/api/users'));
+  it('DELETE removes a member', async () => {
+    const before = await json<{ data: { id: number }[] }>(await mockFetch('/api/members'));
     const target = before.data[0];
 
-    await mockFetch(`/api/users/${target.id}`, { method: 'DELETE' });
+    await mockFetch(`/api/members/${target.id}`, { method: 'DELETE' });
 
-    const after = await json<{ data: { id: number }[] }>(await mockFetch('/api/users'));
-    expect(after.data.map((u) => u.id)).not.toContain(target.id);
+    const after = await json<{ data: { id: number }[] }>(await mockFetch('/api/members'));
+    expect(after.data.map((m) => m.id)).not.toContain(target.id);
+  });
+});
+
+describe('mockFetch: /api/rooms', () => {
+  it('GET returns a non-empty seeded list', async () => {
+    const res = await mockFetch('/api/rooms');
+    const body = await json<{ success: boolean; data: { id: number; name: string }[] }>(res);
+    expect(body.success).toBe(true);
+    expect(body.data.length).toBeGreaterThan(0);
+  });
+
+  it('POST creates a room and it appears in a subsequent GET', async () => {
+    const createRes = await mockFetch('/api/rooms', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Garage' }),
+    });
+    expect(createRes.status).toBe(201);
+
+    const listRes = await mockFetch('/api/rooms');
+    const list = await json<{ data: { name: string }[] }>(listRes);
+    expect(list.data.map((r) => r.name)).toContain('Garage');
+  });
+
+  it('POST returns 409 for a duplicate name', async () => {
+    const res = await mockFetch('/api/rooms', { method: 'POST', body: JSON.stringify({ name: 'Kitchen' }) });
+    expect(res.status).toBe(409);
+  });
+
+  it('DELETE returns 409 when the room still has chores', async () => {
+    const before = await json<{ data: { id: number; roomId: number }[] }>(await mockFetch('/api/chores'));
+    const inUseRoomId = before.data[0].roomId;
+
+    const res = await mockFetch(`/api/rooms/${inUseRoomId}`, { method: 'DELETE' });
+    expect(res.status).toBe(409);
+  });
+
+  it('DELETE removes an empty room', async () => {
+    const createRes = await mockFetch('/api/rooms', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Garage' }),
+    });
+    const created = await json<{ data: { id: number } }>(createRes);
+
+    const res = await mockFetch(`/api/rooms/${created.data.id}`, { method: 'DELETE' });
+    expect(res.status).toBe(200);
+
+    const after = await json<{ data: { id: number }[] }>(await mockFetch('/api/rooms'));
+    expect(after.data.map((r) => r.id)).not.toContain(created.data.id);
   });
 });
 
@@ -148,7 +219,7 @@ describe('resetMockData', () => {
       method: 'POST',
       body: JSON.stringify({
         name: 'Temporary',
-        room: 'Kitchen',
+        roomId: 2,
         dateLastCompleted: '2026-07-01T00:00:00.000Z',
         duration: 1,
         frequency: 1,

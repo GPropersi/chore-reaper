@@ -29,7 +29,7 @@ async function restoreVacuum(request: APIRequestContext, token: string) {
     headers: { 'Cf-Access-Jwt-Assertion': token, 'Content-Type': 'application/json' },
     data: {
       name: 'Vacuum',
-      room: 'Living Room',
+      roomId: 1,
       dateLastCompleted: '2026-06-01T00:00:00.000Z',
       duration: 20,
       frequency: 7,
@@ -93,7 +93,7 @@ test('adding a chore while offline survives a reload while still offline', async
 
   await page.getByRole('button', { name: '+ Add Chore' }).click();
   await page.getByLabel('Name').fill('Mop Floors');
-  await page.getByLabel('Room').fill('Kitchen');
+  await page.getByLabel('Room').selectOption({ label: 'Kitchen' });
   await page.getByLabel('Last Completed').fill('2026-06-15');
   await page.getByLabel('Duration (minutes)').fill('15');
   await page.getByLabel('Frequency (days)').fill('3');
@@ -126,7 +126,7 @@ test('a create mutation whose ack is lost over the network is not duplicated onc
 
   await page.getByRole('button', { name: '+ Add Chore' }).click();
   await page.getByLabel('Name').fill('Water Plants');
-  await page.getByLabel('Room').fill('Living Room');
+  await page.getByLabel('Room').selectOption({ label: 'Living Room' });
   await page.getByLabel('Last Completed').fill('2026-06-10');
   await page.getByLabel('Duration (minutes)').fill('5');
   await page.getByLabel('Frequency (days)').fill('4');
@@ -144,7 +144,7 @@ test('a create mutation whose ack is lost over the network is not duplicated onc
     headers: { 'Cf-Access-Jwt-Assertion': token, 'Content-Type': 'application/json' },
     data: {
       name: 'Water Plants',
-      room: 'Living Room',
+      roomId: 1,
       dateLastCompleted: '2026-06-10T00:00:00.000Z',
       duration: 5,
       frequency: 4,

@@ -1,18 +1,40 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Outlet, useOutletContext, useNavigate } from 'react-router-dom';
+import type { Room } from '@customTypes/SharedTypes';
 import NavBar from './components/nav/NavBar';
 import AdminPanel from './components/admin/AdminPanel';
 import ChoresView from './components/chore/ChoresView';
-import { apiFetch } from './utils/api';
+import { apiFetch, setCurrentHouseholdId } from './utils/api';
+
+type Membership = {
+  householdId: number;
+  householdName: string;
+  householdTimezone: string;
+  role: 'admin' | 'user';
+};
 
 type Me = {
   id: number;
   email: string;
-  role: 'admin' | 'member';
-  organizationId: number;
-  organizationTimezone: string;
   timezone: string;
+  memberships: Membership[];
+  currentHouseholdId: number;
 };
+
+type ApiResponse<T> = { success: boolean; data?: T; error?: string };
+
+function useRooms() {
+  const [rooms, setRooms] = useState<Room[]>([]);
+
+  useEffect(() => {
+    apiFetch('/api/rooms')
+      .then((res) => res.json() as Promise<ApiResponse<Room[]>>)
+      .then((body) => setRooms(body.data ?? []))
+      .catch(() => {});
+  }, []);
+
+  return { rooms, setRooms };
+}
 
 const ME_CACHE_KEY = 'me-cache-v1';
 
@@ -20,30 +42,73 @@ function useMe() {
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    apiFetch('/api/me')
+  function load(): Promise<Me | null> {
+    return apiFetch('/api/me')
       .then((res) => (res.ok ? (res.json() as Promise<Me>) : null))
       .then((fetched) => {
-        if (fetched) localStorage.setItem(ME_CACHE_KEY, JSON.stringify(fetched));
+        if (fetched) {
+          localStorage.setItem(ME_CACHE_KEY, JSON.stringify(fetched));
+          // Keep apiFetch's outgoing X-Household-Id in sync with whatever the
+          // backend actually resolved — matters on first-ever login, where no
+          // household was pre-selected and the backend picked the
+          // single-household fallback itself.
+          setCurrentHouseholdId(fetched.currentHouseholdId);
+        }
         setMe(fetched);
+        return fetched;
       })
       .catch(() => {
         const cached = localStorage.getItem(ME_CACHE_KEY);
-        setMe(cached ? (JSON.parse(cached) as Me) : null);
-      })
-      .finally(() => setLoading(false));
+        const fallback = cached ? (JSON.parse(cached) as Me) : null;
+        setMe(fallback);
+        return fallback;
+      });
+  }
+
+  useEffect(() => {
+    load().finally(() => setLoading(false));
+    // Runs once on mount only — household switches are driven by
+    // switchHousehold below, not by re-running this effect.
   }, []);
 
-  return { me, loading };
+  function updateHouseholdTimezone(householdTimezone: string) {
+    setMe((prev) => {
+      if (!prev) return prev;
+      const updated = {
+        ...prev,
+        memberships: prev.memberships.map((m) =>
+          m.householdId === prev.currentHouseholdId ? { ...m, householdTimezone } : m,
+        ),
+      };
+      localStorage.setItem(ME_CACHE_KEY, JSON.stringify(updated));
+      return updated;
+    });
+  }
+
+  function switchHousehold(householdId: number) {
+    setCurrentHouseholdId(householdId);
+    setLoading(true);
+    load().finally(() => setLoading(false));
+  }
+
+  return { me, loading, updateHouseholdTimezone, switchHousehold };
 }
 
 type LayoutContext = {
   selectedRoom: string;
-  onRoomsChange: (rooms: string[]) => void;
+  rooms: Room[];
+  onRoomsChange: (rooms: Room[]) => void;
 };
 
-function Layout({ isAdmin }: { isAdmin: boolean }) {
-  const [rooms, setRooms] = useState<string[]>([]);
+type LayoutProps = {
+  isAdmin: boolean;
+  memberships: Membership[];
+  currentHouseholdId: number | undefined;
+  onSwitchHousehold: (householdId: number) => void;
+};
+
+function Layout({ isAdmin, memberships, currentHouseholdId, onSwitchHousehold }: LayoutProps) {
+  const { rooms, setRooms } = useRooms();
   const [selectedRoom, setSelectedRoom] = useState('all');
   const navigate = useNavigate();
 
@@ -57,46 +122,92 @@ function Layout({ isAdmin }: { isAdmin: boolean }) {
 
   return (
     <div>
-      <NavBar rooms={rooms} selectedRoom={selectedRoom} onSelect={handleSelectRoom} isAdmin={isAdmin} />
-      <Outlet context={{ selectedRoom, onRoomsChange: setRooms } satisfies LayoutContext} />
+      <NavBar
+        rooms={rooms}
+        selectedRoom={selectedRoom}
+        onSelect={handleSelectRoom}
+        isAdmin={isAdmin}
+        memberships={memberships}
+        currentHouseholdId={currentHouseholdId}
+        onSwitchHousehold={onSwitchHousehold}
+      />
+      <Outlet context={{ selectedRoom, rooms, onRoomsChange: setRooms } satisfies LayoutContext} />
     </div>
   );
 }
 
-function Home({ me }: { me: Me | null }) {
-  const { selectedRoom, onRoomsChange } = useOutletContext<LayoutContext>();
-  if (!me) return null;
+function Home({ me, currentMembership }: { me: Me | null; currentMembership: Membership | undefined }) {
+  const { selectedRoom, rooms } = useOutletContext<LayoutContext>();
+  if (!me || !currentMembership) return null;
   return (
     <div className="p-4">
       <ChoresView
-        organizationTimezone={me.organizationTimezone}
+        householdTimezone={currentMembership.householdTimezone}
         timezone={me.timezone}
         selectedRoom={selectedRoom}
-        onRoomsChange={onRoomsChange}
+        rooms={rooms}
       />
     </div>
   );
 }
 
-function AdminRoute({ me }: { me: Me | null }) {
-  if (!me) return null;
-  if (me.role !== 'admin') {
-    return <div className="p-4 text-gray-400">Access denied.</div>;
-  }
-  return <AdminPanel />;
+function AdminRoute({
+  me,
+  currentMembership,
+  onHouseholdTimezoneChange,
+}: {
+  me: Me | null;
+  currentMembership: Membership | undefined;
+  onHouseholdTimezoneChange: (timezone: string) => void;
+}) {
+  const { rooms, onRoomsChange } = useOutletContext<LayoutContext>();
+  if (!me || !currentMembership) return null;
+  return (
+    <AdminPanel
+      rooms={rooms}
+      onRoomsChange={onRoomsChange}
+      householdId={currentMembership.householdId}
+      householdTimezone={currentMembership.householdTimezone}
+      onHouseholdTimezoneChange={onHouseholdTimezoneChange}
+    />
+  );
 }
 
 function App() {
-  const { me, loading } = useMe();
+  const { me, loading, updateHouseholdTimezone, switchHousehold } = useMe();
+  const currentMembership = me?.memberships.find((m) => m.householdId === me.currentHouseholdId);
 
   if (loading) return null;
 
   return (
     <BrowserRouter>
       <Routes>
-        <Route element={<Layout isAdmin={me?.role === 'admin'} />}>
-          <Route path="/" element={<Home me={me} />} />
-          <Route path="/admin" element={<AdminRoute me={me} />} />
+        <Route
+          element={
+            <Layout
+              // Remounts Layout (and everything nested under it) on a
+              // household switch, so each child's mount-time fetch naturally
+              // reloads household-scoped data instead of needing bespoke
+              // invalidation.
+              key={me?.currentHouseholdId}
+              isAdmin={currentMembership?.role === 'admin'}
+              memberships={me?.memberships ?? []}
+              currentHouseholdId={me?.currentHouseholdId}
+              onSwitchHousehold={switchHousehold}
+            />
+          }
+        >
+          <Route path="/" element={<Home me={me} currentMembership={currentMembership} />} />
+          <Route
+            path="/admin"
+            element={
+              <AdminRoute
+                me={me}
+                currentMembership={currentMembership}
+                onHouseholdTimezoneChange={updateHouseholdTimezone}
+              />
+            }
+          />
         </Route>
       </Routes>
     </BrowserRouter>

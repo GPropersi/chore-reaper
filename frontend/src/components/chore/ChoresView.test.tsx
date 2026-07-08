@@ -5,11 +5,16 @@ import ChoresView from './ChoresView';
 import { createOutbox } from '../../outbox/outbox';
 import { writeChoresCache, clearChoresCache } from '../../cache/choresCache';
 
+const mockRooms = [
+  { id: 1, householdId: 1, name: 'Living Room' },
+  { id: 2, householdId: 1, name: 'Kitchen' },
+];
+
 const mockChores = [
   {
     id: 1,
     name: 'Vacuum',
-    room: 'Living Room',
+    roomId: 1,
     dateLastCompleted: '2026-06-01T00:00:00.000Z',
     duration: 20,
     frequency: 7,
@@ -18,7 +23,7 @@ const mockChores = [
   {
     id: 2,
     name: 'Dishes',
-    room: 'Kitchen',
+    roomId: 2,
     dateLastCompleted: '2026-06-20T00:00:00.000Z',
     duration: 5,
     frequency: 1,
@@ -67,39 +72,37 @@ describe('ChoresView', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date('2026-07-01T12:00:00.000Z'));
 
-    render(<ChoresView organizationTimezone="Pacific/Kiritimati" timezone="Pacific/Niue" />);
+    render(<ChoresView householdTimezone="Pacific/Kiritimati" timezone="Pacific/Niue" rooms={mockRooms} />);
 
     await vi.waitFor(() => expect(screen.getByText('Vacuum')).toBeInTheDocument());
     expect(screen.getByText('Dishes')).toBeInTheDocument();
   });
 
-  it('filters visible chores by selectedRoom and reports the distinct room list via onRoomsChange', async () => {
+  it('filters visible chores by selectedRoom', async () => {
     stubChoresFetch();
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date('2026-07-01T12:00:00.000Z'));
-    const onRoomsChange = vi.fn();
 
     render(
       <ChoresView
-        organizationTimezone="Pacific/Kiritimati"
+        householdTimezone="Pacific/Kiritimati"
         timezone="Pacific/Niue"
-        selectedRoom="Kitchen"
-        onRoomsChange={onRoomsChange}
+        selectedRoom="2"
+        rooms={mockRooms}
       />,
     );
 
     await vi.waitFor(() => expect(screen.getByText('Dishes')).toBeInTheDocument());
     expect(screen.queryByText('Vacuum')).not.toBeInTheDocument();
-    expect(onRoomsChange).toHaveBeenCalledWith(['Kitchen', 'Living Room']);
   });
 
-  it('renders identical chore ordering and bar colors for two users in the same org with different personal timezones', async () => {
+  it('renders identical chore ordering and bar colors for two users in the same household with different personal timezones', async () => {
     stubChoresFetch();
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date('2026-07-01T12:00:00.000Z'));
 
     const { unmount: unmountA } = render(
-      <ChoresView organizationTimezone="America/New_York" timezone="Asia/Tokyo" />,
+      <ChoresView householdTimezone="America/New_York" timezone="Asia/Tokyo" rooms={mockRooms} />,
     );
     await waitFor(() => expect(screen.getAllByTestId('chore-bar')).toHaveLength(2));
     const summariesA = getBarSummaries();
@@ -107,7 +110,7 @@ describe('ChoresView', () => {
 
     stubChoresFetch();
     const { unmount: unmountB } = render(
-      <ChoresView organizationTimezone="America/New_York" timezone="Australia/Perth" />,
+      <ChoresView householdTimezone="America/New_York" timezone="Australia/Perth" rooms={mockRooms} />,
     );
     await waitFor(() => expect(screen.getAllByTestId('chore-bar')).toHaveLength(2));
     const summariesB = getBarSummaries();
@@ -121,7 +124,7 @@ describe('ChoresView', () => {
     const createdChore = {
       id: 3,
       name: 'Mop Floors',
-      room: 'Kitchen',
+      roomId: 2,
       dateLastCompleted: '2026-06-15T00:00:00.000Z',
       duration: 15,
       frequency: 3,
@@ -142,12 +145,12 @@ describe('ChoresView', () => {
       }),
     );
 
-    render(<ChoresView organizationTimezone="UTC" timezone="UTC" />);
+    render(<ChoresView householdTimezone="UTC" timezone="UTC" rooms={mockRooms} />);
     await waitFor(() => expect(screen.getByText('Vacuum')).toBeInTheDocument());
 
     await user.click(screen.getByRole('button', { name: /add chore/i }));
     await user.type(screen.getByLabelText('Name'), 'Mop Floors');
-    await user.type(screen.getByLabelText('Room'), 'Kitchen');
+    await user.selectOptions(screen.getByLabelText('Room'), 'Kitchen');
     await user.type(screen.getByLabelText('Last Completed'), '2026-06-15');
     await user.type(screen.getByLabelText('Duration (minutes)'), '15');
     await user.type(screen.getByLabelText('Frequency (days)'), '3');
@@ -161,7 +164,7 @@ describe('ChoresView', () => {
     const updatedChore = {
       id: 1,
       name: 'Vacuum Deluxe',
-      room: 'Living Room',
+      roomId: 1,
       dateLastCompleted: '2026-06-01T00:00:00.000Z',
       duration: 20,
       frequency: 7,
@@ -184,7 +187,7 @@ describe('ChoresView', () => {
       }),
     );
 
-    render(<ChoresView organizationTimezone="UTC" timezone="UTC" />);
+    render(<ChoresView householdTimezone="UTC" timezone="UTC" rooms={mockRooms} />);
     await waitFor(() => expect(screen.getByText('Vacuum')).toBeInTheDocument());
 
     await user.click(screen.getAllByLabelText('Edit chore')[0]);
@@ -220,7 +223,7 @@ describe('ChoresView', () => {
       }),
     );
 
-    render(<ChoresView organizationTimezone="UTC" timezone="UTC" />);
+    render(<ChoresView householdTimezone="UTC" timezone="UTC" rooms={mockRooms} />);
     await waitFor(() => expect(screen.getByText('Vacuum')).toBeInTheDocument());
 
     await user.click(screen.getAllByLabelText('Edit chore')[0]);
@@ -249,7 +252,7 @@ describe('ChoresView', () => {
       }),
     );
 
-    render(<ChoresView organizationTimezone="UTC" timezone="UTC" />);
+    render(<ChoresView householdTimezone="UTC" timezone="UTC" rooms={mockRooms} />);
     await waitFor(() => expect(screen.getByText('Vacuum')).toBeInTheDocument());
 
     const vacuumBar = screen.getByText('Vacuum').closest('[data-testid="chore-bar"]') as HTMLElement;
@@ -275,7 +278,7 @@ describe('ChoresView', () => {
       }),
     );
 
-    render(<ChoresView organizationTimezone="UTC" timezone="UTC" />);
+    render(<ChoresView householdTimezone="UTC" timezone="UTC" rooms={mockRooms} />);
     await waitFor(() => expect(screen.getByText('Vacuum')).toBeInTheDocument());
 
     const vacuumBar = screen.getByText('Vacuum').closest('[data-testid="chore-bar"]') as HTMLElement;
@@ -302,7 +305,7 @@ describe('ChoresView', () => {
           data: {
             id: 1,
             name: 'Vacuum',
-            room: 'Living Room',
+            roomId: 1,
             dateLastCompleted: '2026-07-02T00:00:00.000Z',
             duration: 20,
             frequency: 7,
@@ -317,7 +320,7 @@ describe('ChoresView', () => {
           data: {
             id: 1,
             name: 'Vacuum Deluxe',
-            room: 'Living Room',
+            roomId: 1,
             dateLastCompleted: '2026-07-02T00:00:00.000Z',
             duration: 20,
             frequency: 7,
@@ -330,7 +333,7 @@ describe('ChoresView', () => {
     vi.stubGlobal('fetch', fetchImpl);
     const testOutbox = createOutbox(fetchImpl);
 
-    render(<ChoresView organizationTimezone="UTC" timezone="UTC" outbox={testOutbox} />);
+    render(<ChoresView householdTimezone="UTC" timezone="UTC" outbox={testOutbox} rooms={mockRooms} />);
     await waitFor(() => expect(screen.getByText('Vacuum')).toBeInTheDocument());
 
     const vacuumBar = screen.getByText('Vacuum').closest('[data-testid="chore-bar"]') as HTMLElement;
@@ -359,7 +362,7 @@ describe('ChoresView', () => {
       vi.fn(() => Promise.reject(new Error('network down'))),
     );
 
-    render(<ChoresView organizationTimezone="UTC" timezone="UTC" />);
+    render(<ChoresView householdTimezone="UTC" timezone="UTC" rooms={mockRooms} />);
 
     await waitFor(() => expect(screen.getByText('Vacuum')).toBeInTheDocument());
     expect(screen.getByTestId('status-banner')).toBeInTheDocument();
@@ -375,7 +378,7 @@ describe('ChoresView', () => {
       }),
     );
 
-    render(<ChoresView organizationTimezone="UTC" timezone="UTC" />);
+    render(<ChoresView householdTimezone="UTC" timezone="UTC" rooms={mockRooms} />);
 
     await waitFor(() => expect(screen.getByText('Vacuum')).toBeInTheDocument());
     expect(screen.getByTestId('status-banner')).toBeInTheDocument();
@@ -389,7 +392,7 @@ describe('ChoresView', () => {
       vi.fn(() => jsonResponse({ success: true, data: mockChores })),
     );
 
-    render(<ChoresView organizationTimezone="UTC" timezone="UTC" />);
+    render(<ChoresView householdTimezone="UTC" timezone="UTC" rooms={mockRooms} />);
     await waitFor(() => expect(screen.getByTestId('status-banner')).toBeInTheDocument());
 
     vi.stubGlobal('navigator', { ...navigator, onLine: true });
@@ -413,14 +416,14 @@ describe('ChoresView', () => {
       tempId: -123,
       payload: {
         name: 'Mop Floors',
-        room: 'Kitchen',
+        roomId: 2,
         dateLastCompleted: '2026-06-15T00:00:00.000Z',
         duration: 15,
         frequency: 3,
       },
     });
 
-    render(<ChoresView organizationTimezone="UTC" timezone="UTC" outbox={testOutbox} />);
+    render(<ChoresView householdTimezone="UTC" timezone="UTC" outbox={testOutbox} rooms={mockRooms} />);
 
     await waitFor(() => expect(screen.getByText('Vacuum')).toBeInTheDocument());
     expect(screen.getByText('Mop Floors')).toBeInTheDocument();

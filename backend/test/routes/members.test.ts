@@ -3,6 +3,7 @@ import { env } from 'cloudflare:workers';
 import app from '../../src/app.js';
 import { signTestJwt } from '../helpers/sign-test-jwt.js';
 import { stubAccessJwks, testEnv, TEST_ACCESS_AUD, TEST_JWKS_URL } from '../helpers/access-test-env.js';
+import { seedHouseholdMember } from '../helpers/seed.js';
 import primaryJwks from '../fixtures/test-jwks.json' with { type: 'json' };
 
 const ACCESS_ALLOWLIST_ENV = {
@@ -21,7 +22,7 @@ function jsonResponse(body: unknown, status = 200) {
 
 // Stubs both the JWKS endpoint (needed for accessAuth to verify the request's
 // own JWT) and the Cloudflare Access policy endpoint the route calls out to
-// after creating a user, so these tests can exercise the real
+// after adding a member, so these tests can exercise the real
 // grantAccessListEntry implementation end-to-end rather than re-stubbing its
 // already-covered internals (see access-allowlist.test.ts for those cases).
 function stubJwksAndPolicy(policyInclude: unknown[], putStatus = 200) {
@@ -57,67 +58,72 @@ async function authHeader(email: string) {
 beforeEach(async () => {
   stubAccessJwks();
   await env.DB.exec('DELETE FROM chores');
+  await env.DB.exec('DELETE FROM household_members');
   await env.DB.exec('DELETE FROM users');
-  await env.DB.exec('DELETE FROM organizations');
+  await env.DB.exec('DELETE FROM households');
   await env.DB.batch([
-    env.DB.prepare('INSERT INTO organizations (id, name, timezone) VALUES (1, ?, ?)').bind('Org A', 'UTC'),
-    env.DB.prepare('INSERT INTO organizations (id, name, timezone) VALUES (2, ?, ?)').bind('Org B', 'UTC'),
-    env.DB.prepare('INSERT INTO users (id, organization_id, email, role) VALUES (1, 1, ?, ?)').bind(
-      'admin-a@example.com',
-      'admin',
-    ),
-    env.DB.prepare('INSERT INTO users (id, organization_id, email, role) VALUES (2, 2, ?, ?)').bind(
-      'admin-b@example.com',
-      'admin',
-    ),
-    env.DB.prepare('INSERT INTO users (id, organization_id, email, role) VALUES (3, 1, ?, ?)').bind(
-      'member-a@example.com',
-      'member',
-    ),
+    env.DB.prepare('INSERT INTO households (id, name, timezone) VALUES (1, ?, ?)').bind('Household A', 'UTC'),
+    env.DB.prepare('INSERT INTO households (id, name, timezone) VALUES (2, ?, ?)').bind('Household B', 'UTC'),
   ]);
+  await seedHouseholdMember({ id: 1, householdId: 1, email: 'admin-a@example.com', role: 'admin' });
+  await seedHouseholdMember({ id: 2, householdId: 2, email: 'admin-b@example.com', role: 'admin' });
+  await seedHouseholdMember({ id: 3, householdId: 1, email: 'member-a@example.com', role: 'user' });
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('POST /api/users', () => {
-  it('returns 403 for a non-admin', async () => {
+describe('POST /api/members', () => {
+  it('returns 403 for a non-admin adding a brand-new user (no account anywhere yet)', async () => {
     const res = await app.request(
-      '/api/users',
+      '/api/members',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(await authHeader('member-a@example.com')) },
-        body: JSON.stringify({ email: 'new@example.com', role: 'member' }),
+        body: JSON.stringify({ email: 'new@example.com', role: 'user' }),
       },
       testEnv(),
     );
     expect(res.status).toBe(403);
   });
 
-  it('creates a user scoped to the admin own org, ignoring a different organizationId in the body', async () => {
+  it('allows a non-admin to add an email that already has an account elsewhere', async () => {
     const res = await app.request(
-      '/api/users',
+      '/api/members',
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(await authHeader('admin-a@example.com')) },
-        body: JSON.stringify({ email: 'new@example.com', role: 'member', organizationId: 2 }),
+        headers: { 'Content-Type': 'application/json', ...(await authHeader('member-a@example.com')) },
+        body: JSON.stringify({ email: 'admin-b@example.com', role: 'user' }),
       },
       testEnv(),
     );
     expect(res.status).toBe(201);
-    const body = (await res.json()) as { data: { organizationId: number; email: string } };
-    expect(body.data.organizationId).toBe(1);
-    expect(body.data.email).toBe('new@example.com');
   });
 
-  it('normalizes the email (trim + lowercase) when creating a user', async () => {
+  it('creates a member scoped to the admin own household, ignoring a different householdId in the body', async () => {
     const res = await app.request(
-      '/api/users',
+      '/api/members',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(await authHeader('admin-a@example.com')) },
-        body: JSON.stringify({ email: '  New@Example.com  ', role: 'member' }),
+        body: JSON.stringify({ email: 'new@example.com', role: 'user', householdId: 2 }),
+      },
+      testEnv(),
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { data: { householdId: number; email: string } };
+    expect(body.data.householdId).toBe(1);
+    expect(body.data.email).toBe('new@example.com');
+  });
+
+  it('normalizes the email (trim + lowercase) when creating a member', async () => {
+    const res = await app.request(
+      '/api/members',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await authHeader('admin-a@example.com')) },
+        body: JSON.stringify({ email: '  New@Example.com  ', role: 'user' }),
       },
       testEnv(),
     );
@@ -126,13 +132,13 @@ describe('POST /api/users', () => {
     expect(body.data.email).toBe('new@example.com');
   });
 
-  it('lets a user authenticate regardless of email-casing differences between creation and login', async () => {
+  it('lets a member authenticate regardless of email-casing differences between creation and login', async () => {
     const createRes = await app.request(
-      '/api/users',
+      '/api/members',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(await authHeader('admin-a@example.com')) },
-        body: JSON.stringify({ email: 'Jane@Example.com', role: 'member' }),
+        body: JSON.stringify({ email: 'Jane@Example.com', role: 'user' }),
       },
       testEnv(),
     );
@@ -143,14 +149,57 @@ describe('POST /api/users', () => {
     expect(meRes.status).toBe(200);
   });
 
-  it('grants Cloudflare Access on creation and returns no warning when the grant succeeds', async () => {
-    const fetchMock = stubJwksAndPolicy([]);
+  it('adding an email that already belongs to another household creates only a new membership, not a duplicate account', async () => {
+    // admin-b@example.com already has a users row (household 2) from beforeEach —
+    // adding them to household 1 must not touch/duplicate that row.
     const res = await app.request(
-      '/api/users',
+      '/api/members',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(await authHeader('admin-a@example.com')) },
-        body: JSON.stringify({ email: 'new@example.com', role: 'member' }),
+        body: JSON.stringify({ email: 'admin-b@example.com', role: 'user' }),
+      },
+      testEnv(),
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { data: { householdId: number; role: string } };
+    expect(body.data.householdId).toBe(1);
+    expect(body.data.role).toBe('user');
+
+    const usersCount = await env.DB.prepare('SELECT COUNT(*) as count FROM users WHERE email = ?')
+      .bind('admin-b@example.com')
+      .first<{ count: number }>();
+    expect(usersCount?.count).toBe(1);
+
+    const memberships = await env.DB.prepare(
+      'SELECT household_id FROM household_members WHERE user_id = 2',
+    ).all<{
+      household_id: number;
+    }>();
+    expect(memberships.results.map((m) => m.household_id).sort()).toEqual([1, 2]);
+  });
+
+  it('returns 409 when the email is already a member of the current household', async () => {
+    const res = await app.request(
+      '/api/members',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await authHeader('admin-a@example.com')) },
+        body: JSON.stringify({ email: 'member-a@example.com', role: 'user' }),
+      },
+      testEnv(),
+    );
+    expect(res.status).toBe(409);
+  });
+
+  it('grants Cloudflare Access on creation and returns no warning when the grant succeeds', async () => {
+    const fetchMock = stubJwksAndPolicy([]);
+    const res = await app.request(
+      '/api/members',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await authHeader('admin-a@example.com')) },
+        body: JSON.stringify({ email: 'new@example.com', role: 'user' }),
       },
       { ...testEnv(), ...ACCESS_ALLOWLIST_ENV },
     );
@@ -172,11 +221,11 @@ describe('POST /api/users', () => {
   it('returns no warning when the email is already on the Access allow-list (idempotent grant)', async () => {
     const fetchMock = stubJwksAndPolicy([{ email: { email: 'new@example.com' } }]);
     const res = await app.request(
-      '/api/users',
+      '/api/members',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(await authHeader('admin-a@example.com')) },
-        body: JSON.stringify({ email: 'new@example.com', role: 'member' }),
+        body: JSON.stringify({ email: 'new@example.com', role: 'user' }),
       },
       { ...testEnv(), ...ACCESS_ALLOWLIST_ENV },
     );
@@ -191,16 +240,16 @@ describe('POST /api/users', () => {
     expect(calls[0][1]?.method).toBeUndefined(); // GET, not PUT
   });
 
-  it('still creates the user and returns 201 with a warning when the Access grant fails', async () => {
+  it('still creates the member and returns 201 with a warning when the Access grant fails', async () => {
     // stubAccessJwks() (from beforeEach) 404s any URL other than the JWKS
     // endpoint, so the policy GET this route triggers fails naturally here —
     // no extra stubbing needed to exercise the degraded path.
     const res = await app.request(
-      '/api/users',
+      '/api/members',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(await authHeader('admin-a@example.com')) },
-        body: JSON.stringify({ email: 'gracefail@example.com', role: 'member' }),
+        body: JSON.stringify({ email: 'gracefail@example.com', role: 'user' }),
       },
       { ...testEnv(), ...ACCESS_ALLOWLIST_ENV },
     );
@@ -210,9 +259,9 @@ describe('POST /api/users', () => {
     expect(body.warning).toContain('gracefail@example.com');
 
     // The D1 row itself must exist regardless of the Access-API failure —
-    // the user is never left uncreated over a Cloudflare API problem.
+    // the member is never left uncreated over a Cloudflare API problem.
     const listRes = await app.request(
-      '/api/users',
+      '/api/members',
       { headers: await authHeader('admin-a@example.com') },
       { ...testEnv(), ...ACCESS_ALLOWLIST_ENV },
     );
@@ -221,10 +270,10 @@ describe('POST /api/users', () => {
   });
 });
 
-describe('GET /api/users', () => {
-  it('lists only same-org users for an admin', async () => {
+describe('GET /api/members', () => {
+  it('lists only same-household members for an admin', async () => {
     const res = await app.request(
-      '/api/users',
+      '/api/members',
       { headers: await authHeader('admin-a@example.com') },
       testEnv(),
     );
@@ -235,22 +284,44 @@ describe('GET /api/users', () => {
   });
 });
 
-describe('DELETE /api/users/:id', () => {
-  it('cannot target a user in a different org (404)', async () => {
+describe('DELETE /api/members/:id', () => {
+  it('cannot target a member in a different household (404)', async () => {
     const res = await app.request(
-      '/api/users/2',
+      '/api/members/2',
       { method: 'DELETE', headers: await authHeader('admin-a@example.com') },
       testEnv(),
     );
     expect(res.status).toBe(404);
   });
 
-  it('deletes a same-org user', async () => {
+  it('deletes a same-household member', async () => {
     const res = await app.request(
-      '/api/users/3',
+      '/api/members/3',
       { method: 'DELETE', headers: await authHeader('admin-a@example.com') },
       testEnv(),
     );
     expect(res.status).toBe(200);
+  });
+
+  it('removing a member from one household does not affect their membership in another', async () => {
+    // Give admin-b (household 2 only, from beforeEach) a second membership in household 1.
+    await env.DB.prepare('INSERT INTO household_members (user_id, household_id, role) VALUES (2, 1, ?)')
+      .bind('user')
+      .run();
+
+    const res = await app.request(
+      '/api/members/2',
+      { method: 'DELETE', headers: await authHeader('admin-a@example.com') },
+      testEnv(),
+    );
+    expect(res.status).toBe(200);
+
+    const remainingMembership = await env.DB.prepare(
+      'SELECT id FROM household_members WHERE user_id = 2 AND household_id = 2',
+    ).first<{ id: number }>();
+    expect(remainingMembership).toBeTruthy();
+
+    const usersRow = await env.DB.prepare('SELECT id FROM users WHERE id = 2').first<{ id: number }>();
+    expect(usersRow).toBeTruthy();
   });
 });

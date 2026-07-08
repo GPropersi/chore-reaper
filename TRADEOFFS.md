@@ -8,10 +8,10 @@ never had a local mode to compare against directly.
 
 ## What the cloud-native model buys
 
-**Sharability.** No hardware requirement per organization, no one needs to own or maintain a physical
+**Sharability.** No hardware requirement per household, no one needs to own or maintain a physical
 device to use this. A real public URL, gated by Cloudflare Access, reachable from anywhere.
 
-**Real authentication.** Every request is tied to a verified identity and scoped to an organization —
+**Real authentication.** Every request is tied to a verified identity and scoped to a household —
 not "anyone on this network has full access," which was the honest state of the sibling project's local
 model.
 
@@ -29,7 +29,7 @@ service-worker caching make this _offline-tolerant_ — a brief wifi blip degrad
 _offline-capable-forever_ the way a fully local deployment is. Worth being honest about this ceiling
 rather than implying push-based sync or caching fully closes the gap.
 
-**Data lives with a third party.** Organization and user data live in Cloudflare's infrastructure, and
+**Data lives with a third party.** Household and user data live in Cloudflare's infrastructure, and
 identity is verified through Cloudflare Access rather than something self-hosted. Reasonable for most
 use cases, but a real dependency, not a neutral default.
 
@@ -41,11 +41,11 @@ design exists to avoid building in the first place.
 
 **Free-tier ceilings are a real constraint, not just a cost line.** Growth is bounded by Workers request
 quota, D1 read/write quotas, and Access's seat cap. Comfortable at small scale, but "add more
-organizations" becomes "am I still inside the free tier" — a question a self-hosted deployment never has
+households" becomes "am I still inside the free tier" — a question a self-hosted deployment never has
 to ask, since its only limit is hardware you fully own.
 
 **Running infrastructure other people's data lives in.** Whoever operates this is now responsible for
-uptime and safety of every organization's data on it — an ongoing obligation that a fully local,
+uptime and safety of every household's data on it — an ongoing obligation that a fully local,
 one-household-per-device model never creates, since each deployment there is self-contained and someone
 else's problem if it breaks.
 
