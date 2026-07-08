@@ -25,7 +25,7 @@ type MockMember = {
   id: number;
   householdId: number;
   email: string;
-  role: 'admin' | 'user';
+  isAdmin: boolean;
   timezone: string | null;
 };
 
@@ -40,12 +40,12 @@ function seedMe() {
     id: 1,
     email: 'preview@example.com',
     timezone: 'America/Chicago',
+    isAdmin: true,
     memberships: [
       {
         householdId: 1,
         householdName: 'Preview Household',
         householdTimezone: 'America/Chicago',
-        role: 'admin' as const,
       },
     ],
     currentHouseholdId: 1,
@@ -99,8 +99,8 @@ function seedChores(): ChoreWire[] {
 
 function seedMembers(): MockMember[] {
   return [
-    { id: 1, householdId: 1, email: 'preview@example.com', role: 'admin', timezone: 'America/Chicago' },
-    { id: 2, householdId: 1, email: 'roommate@example.com', role: 'user', timezone: null },
+    { id: 1, householdId: 1, email: 'preview@example.com', isAdmin: true, timezone: 'America/Chicago' },
+    { id: 2, householdId: 1, email: 'roommate@example.com', isAdmin: false, timezone: null },
   ];
 }
 
@@ -189,9 +189,28 @@ export async function mockFetch(path: string, init?: RequestInit): Promise<Respo
   if (path === '/api/members' && method === 'GET') {
     return jsonResponse({ success: true, data: members });
   }
+
+  if (path === '/api/admin/users' && method === 'GET') {
+    const householdName =
+      me.memberships.find((m) => m.householdId === 1)?.householdName ?? 'Preview Household';
+    const data = members.map((member) => ({
+      id: member.id,
+      email: member.email,
+      timezone: member.timezone,
+      isAdmin: member.isAdmin,
+      households: [{ id: member.householdId, name: householdName }],
+    }));
+    return jsonResponse({ success: true, data });
+  }
   if (path === '/api/members' && method === 'POST') {
     const body = parseBody(init);
-    const member = { householdId: 1, timezone: null, ...body, id: nextMemberId++ } as MockMember;
+    const member = {
+      householdId: 1,
+      timezone: null,
+      isAdmin: false,
+      ...body,
+      id: nextMemberId++,
+    } as MockMember;
     members = [...members, member];
     return jsonResponse({ success: true, data: member }, 201);
   }

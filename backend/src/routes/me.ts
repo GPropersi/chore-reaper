@@ -7,13 +7,12 @@ type MembershipRow = {
   household_id: number;
   household_name: string;
   household_timezone: string;
-  role: 'admin' | 'user';
 };
 
 me.get('/', async (c) => {
   const memberships = await c.env.DB.prepare(
     `SELECT hm.household_id AS household_id, h.name AS household_name,
-            h.timezone AS household_timezone, hm.role AS role
+            h.timezone AS household_timezone
      FROM household_members hm
      JOIN households h ON h.id = hm.household_id
      WHERE hm.user_id = ?
@@ -28,11 +27,11 @@ me.get('/', async (c) => {
     id: c.var.userId,
     email: c.var.verifiedEmail,
     timezone: c.var.timezone ?? current?.household_timezone ?? null,
+    isAdmin: c.var.isAdmin,
     memberships: memberships.results.map((m) => ({
       householdId: m.household_id,
       householdName: m.household_name,
       householdTimezone: m.household_timezone,
-      role: m.role,
     })),
     currentHouseholdId: c.var.householdId,
   });

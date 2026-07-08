@@ -57,8 +57,8 @@ describe('apiFetch', () => {
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { memberships: { role: string }[] };
-    expect(body.memberships[0].role).toBe('admin');
+    const body = (await res.json()) as { isAdmin: boolean };
+    expect(body.isAdmin).toBe(true);
   });
 
   it('routes on the Pages project default domain too, not just branch previews', async () => {

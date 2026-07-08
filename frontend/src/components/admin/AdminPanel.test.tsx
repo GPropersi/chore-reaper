@@ -10,8 +10,8 @@ function jsonResponse(body: unknown) {
 }
 
 const initialMembers = [
-  { id: 1, householdId: 1, email: 'admin@example.com', role: 'admin', timezone: 'America/Chicago' },
-  { id: 2, householdId: 1, email: 'member@example.com', role: 'user', timezone: null },
+  { id: 1, householdId: 1, email: 'admin@example.com', isAdmin: true, timezone: 'America/Chicago' },
+  { id: 2, householdId: 1, email: 'member@example.com', isAdmin: false, timezone: null },
 ];
 
 const noRoomsProps = {
@@ -20,6 +20,7 @@ const noRoomsProps = {
   householdId: 1,
   householdTimezone: 'America/Chicago',
   onHouseholdTimezoneChange: () => {},
+  isAdmin: false,
 };
 
 beforeEach(() => {
@@ -64,7 +65,6 @@ describe('AdminPanel', () => {
     await user.click(screen.getByRole('button', { name: 'Add Member' }));
     const modal = screen.getByTestId('add-member-modal-backdrop');
     await user.type(within(modal).getByLabelText('Email'), 'new@example.com');
-    await user.selectOptions(within(modal).getByLabelText('Role'), 'admin');
     await user.selectOptions(within(modal).getByLabelText('Timezone'), 'America/New_York');
     await user.click(within(modal).getByRole('button', { name: 'Save' }));
 
@@ -74,7 +74,6 @@ describe('AdminPanel', () => {
     expect(postCall).toBeDefined();
     expect(JSON.parse(postCall![1]!.body as string)).toEqual({
       email: 'new@example.com',
-      role: 'admin',
       timezone: 'America/New_York',
     });
   });
@@ -148,5 +147,46 @@ describe('AdminPanel', () => {
       expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(true);
     });
     expect(screen.queryByText('admin@example.com')).not.toBeInTheDocument();
+  });
+
+  it('renders the Users directory at the bottom when isAdmin is true', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        const method = init?.method ?? 'GET';
+        if (url === '/api/members' && method === 'GET') {
+          return jsonResponse({ success: true, data: initialMembers });
+        }
+        if (url === '/api/admin/users' && method === 'GET') {
+          return jsonResponse({
+            success: true,
+            data: [
+              {
+                id: 1,
+                email: 'admin@example.com',
+                timezone: 'America/Chicago',
+                isAdmin: true,
+                households: [{ id: 1, name: 'Household A' }],
+              },
+            ],
+          });
+        }
+        throw new Error(`Unhandled fetch: ${method} ${url}`);
+      }),
+    );
+
+    render(<AdminPanel {...noRoomsProps} isAdmin={true} />);
+
+    expect(await screen.findByRole('heading', { name: 'Users' })).toBeInTheDocument();
+  });
+
+  it('does not render (or fetch) the Users directory when isAdmin is false', async () => {
+    render(<AdminPanel {...noRoomsProps} isAdmin={false} />);
+
+    await screen.findByText('admin@example.com');
+    expect(screen.queryByRole('heading', { name: 'Users' })).not.toBeInTheDocument();
+    const fetchMock = vi.mocked(fetch);
+    expect(fetchMock.mock.calls.some(([input]) => input.toString() === '/api/admin/users')).toBe(false);
   });
 });

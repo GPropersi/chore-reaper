@@ -10,5 +10,19 @@
       "Bash(git fetch *)",
       "Bash(unset GH_TOKEN)"
     ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/scripts/hook-block-cd-redirect.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
   }
 }

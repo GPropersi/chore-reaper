@@ -13,20 +13,21 @@ members.get('/', async (c) => {
 
 members.post('/', async (c) => {
   const body = await c.req.json<Record<string, unknown>>();
-  if (!body.email || (body.role !== 'admin' && body.role !== 'user')) {
+  if (!body.email) {
     return c.json({ success: false, error: 'Missing required fields' } satisfies ApiResponse<never>, 400);
   }
   // householdId always comes from the caller's own session, never the
   // request body — a member cannot add a member to a different household by
   // passing a different householdId here. Any household member can call
   // this (adding someone who already has an account elsewhere); only the
-  // brand-new-account path inside addHouseholdMember is admin-gated.
+  // brand-new-account path inside addHouseholdMember is admin-gated, and that
+  // check is against the caller's global admin status, not a per-household role.
   const result = await addHouseholdMember(
     c.env.DB,
     c.var.householdId,
-    { email: String(body.email), role: body.role, timezone: body.timezone ? String(body.timezone) : null },
+    { email: String(body.email), timezone: body.timezone ? String(body.timezone) : null },
     c.var.userId,
-    c.var.role,
+    c.var.isAdmin,
   );
 
   if (result.status === 'already_member') {

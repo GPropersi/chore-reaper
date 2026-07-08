@@ -5,7 +5,6 @@ import TimezoneSelect from '../form/TimezoneSelect';
 
 export type AddMemberInput = {
   email: string;
-  role: 'admin' | 'user';
   timezone: string;
 };
 
@@ -16,7 +15,6 @@ type AddMemberModalProps = {
 
 export default function AddMemberModal({ onSubmit, onCancel }: AddMemberModalProps) {
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState<'admin' | 'user'>('user');
   const [timezone, setTimezone] = useState('');
 
   function handleBackdropClick(event: React.MouseEvent<HTMLDivElement>) {
@@ -27,7 +25,7 @@ export default function AddMemberModal({ onSubmit, onCancel }: AddMemberModalPro
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    onSubmit({ email, role, timezone });
+    onSubmit({ email, timezone });
   }
 
   return createPortal(
@@ -47,20 +45,6 @@ export default function AddMemberModal({ onSubmit, onCancel }: AddMemberModalPro
             required
             autoFocus
           />
-          <div className="flex flex-col gap-1">
-            <label htmlFor="role" className="text-sm text-gray-400">
-              Role
-            </label>
-            <select
-              id="role"
-              value={role}
-              onChange={(e) => setRole(e.target.value as 'admin' | 'user')}
-              className="bg-gray-700 text-white rounded px-3 py-2 text-sm"
-            >
-              <option value="user">User</option>
-              <option value="admin">Admin</option>
-            </select>
-          </div>
           <TimezoneSelect id="timezone" label="Timezone" value={timezone} onChange={setTimezone} allowUnset />
 
           <div className="flex gap-3 mt-2">

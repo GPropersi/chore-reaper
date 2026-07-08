@@ -4,16 +4,16 @@ import type { AppEnv } from '../types.js';
 type UserRow = {
   id: number;
   timezone: string | null;
+  is_admin: number;
 };
 
 type MembershipRow = {
   household_id: number;
-  role: 'admin' | 'user';
 };
 
 export const householdScope = createMiddleware<AppEnv>(async (c, next) => {
   const email = c.var.verifiedEmail;
-  const user = await c.env.DB.prepare('SELECT id, timezone FROM users WHERE email = ?')
+  const user = await c.env.DB.prepare('SELECT id, timezone, is_admin FROM users WHERE email = ?')
     .bind(email)
     .first<UserRow>();
 
@@ -22,7 +22,7 @@ export const householdScope = createMiddleware<AppEnv>(async (c, next) => {
   }
 
   const memberships = await c.env.DB.prepare(
-    'SELECT household_id, role FROM household_members WHERE user_id = ? ORDER BY household_id',
+    'SELECT household_id FROM household_members WHERE user_id = ? ORDER BY household_id',
   )
     .bind(user.id)
     .all<MembershipRow>();
@@ -58,7 +58,7 @@ export const householdScope = createMiddleware<AppEnv>(async (c, next) => {
 
   c.set('userId', user.id);
   c.set('householdId', membership.household_id);
-  c.set('role', membership.role);
+  c.set('isAdmin', user.is_admin === 1);
   c.set('timezone', user.timezone);
 
   await next();

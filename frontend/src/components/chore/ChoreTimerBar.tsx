@@ -1,6 +1,9 @@
-import { useMemo, useRef } from 'react';
+import { useRef, useState, useMemo } from 'react';
 import { useSwipeable } from 'react-swipeable';
+import type { SwipeEventData } from 'react-swipeable';
+import { Pencil, Trash2 } from 'lucide-react';
 import { differenceInDays, startOfDay } from 'date-fns';
+import { toZonedTime } from 'date-fns-tz';
 import type { Chore } from '@customTypes/SharedTypes';
 import { computeBar } from '@utils/choreBarMath';
 import ProgressBar from './ProgressBar';
@@ -10,43 +13,170 @@ import CompletionInfo from './CompletionInfo';
 type ChoreTimerBarProps = {
   chore: Chore;
   day: Date;
-  timezone: string;
+  householdTimezone: string;
   isSimulating: boolean;
   onComplete: (id: number, date: Date) => void;
   onDelete: (id: number) => void;
   onEdit?: (id: number) => void;
 };
 
+// How far the row must be dragged before a swipe "commits" to opening the
+// action buttons underneath, rather than springing back to closed.
+const SWIPE_TRIGGER_DISTANCE = 120;
+// How far the row stays parked once opened — enough room for both circular
+// buttons (h-12/w-12) side by side with a gap, or just one if there's no
+// edit handler. Matches iOS Messages' floating circular swipe actions.
+const OPEN_OFFSET_BOTH = 150;
+const OPEN_OFFSET_DELETE_ONLY = 80;
+
 export default function ChoreTimerBar({
   chore,
   day,
-  timezone,
+  householdTimezone,
   isSimulating,
   onComplete,
   onDelete,
   onEdit,
 }: ChoreTimerBarProps) {
   const daysSince = useMemo(
-    () => differenceInDays(startOfDay(day), startOfDay(chore.dateLastCompleted)),
-    [day, chore.dateLastCompleted],
+    () =>
+      differenceInDays(
+        startOfDay(toZonedTime(day, householdTimezone)),
+        startOfDay(toZonedTime(chore.dateLastCompleted, householdTimezone)),
+      ),
+    [day, chore.dateLastCompleted, householdTimezone],
   );
 
   const { isOverdue, barWidth, barColor } = computeBar(daysSince, chore.frequency);
+  const openOffset = onEdit ? OPEN_OFFSET_BOTH : OPEN_OFFSET_DELETE_ONLY;
+
+  // Swiping no longer performs delete/edit directly — a single left-swipe
+  // reveals both real, pressable buttons together and holds the row open
+  // (like iOS Mail), so a completed swipe gesture can't by itself delete
+  // anything; a separate, deliberate tap on a revealed button is required.
+  // Only one direction does anything now — edit lives next to delete
+  // instead of behind its own opposite-direction swipe.
+  const [isOpen, setIsOpen] = useState(false);
 
   const swipingRef = useRef(false);
-  const swipeHandlers = useSwipeable({
-    onSwipedLeft: () => {
-      swipingRef.current = true;
-      if (!isSimulating) onDelete(chore.id);
+  const justCommittedRef = useRef(false);
+  const barRef = useRef<HTMLDivElement>(null);
+  const editButtonRef = useRef<HTMLButtonElement>(null);
+  const deleteButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Snaps to whichever state (open/closed) is passed in — used both to
+  // commit a completed gesture and to revert an abandoned one back to
+  // wherever it already was (open or closed), so the same function works
+  // for both directions instead of always resetting to closed.
+  function animateTo(nextOpen: boolean) {
+    const el = barRef.current;
+    if (el) {
+      el.style.transition = 'transform 150ms ease-out';
+      el.style.transform = nextOpen ? `translateX(-${openOffset}px)` : '';
+    }
+    for (const btn of [editButtonRef.current, deleteButtonRef.current]) {
+      if (!btn) continue;
+      btn.style.transition = 'opacity 150ms ease-out';
+      btn.style.opacity = nextOpen ? '1' : '0';
+    }
+  }
+
+  function commitOpen() {
+    setIsOpen(true);
+    animateTo(true);
+  }
+
+  function commitClose() {
+    setIsOpen(false);
+    animateTo(false);
+  }
+
+  const { ref: attachSwipeRef, ...swipeHandlers } = useSwipeable({
+    onSwipeStart: () => {
+      const el = barRef.current;
+      if (el) el.style.transition = 'none';
+      for (const btn of [editButtonRef.current, deleteButtonRef.current]) {
+        if (btn) btn.style.transition = 'none';
+      }
     },
-    onSwipedRight: () => {
+    onSwiping: ({ deltaX, dir }: SwipeEventData) => {
+      const el = barRef.current;
+      if (!el) return;
+      if (!isOpen) {
+        // Closed: only a left-swipe previews opening.
+        if (dir !== 'Left') return;
+        const clamped = Math.max(-SWIPE_TRIGGER_DISTANCE, Math.min(0, deltaX));
+        el.style.transform = `translateX(${clamped}px)`;
+        const progress = Math.min(1, Math.abs(clamped) / SWIPE_TRIGGER_DISTANCE);
+        if (deleteButtonRef.current) deleteButtonRef.current.style.opacity = String(progress);
+        if (editButtonRef.current) editButtonRef.current.style.opacity = String(progress);
+      } else {
+        // Open: only a right-swipe (swiping back) previews closing. This is
+        // a real gesture handled here, not a fallback onto the native click
+        // that fires after release — that only happens reliably for mouse
+        // input. Touch browsers suppress the synthetic click after an
+        // actual drag, so relying on a tap-only close left iOS with no way
+        // to swipe a row shut once opened.
+        if (dir !== 'Right') return;
+        const dragged = Math.max(0, Math.min(SWIPE_TRIGGER_DISTANCE, deltaX));
+        const position = Math.min(0, -openOffset + dragged);
+        el.style.transform = `translateX(${position}px)`;
+        const remaining = String(1 - Math.min(1, dragged / SWIPE_TRIGGER_DISTANCE));
+        if (deleteButtonRef.current) deleteButtonRef.current.style.opacity = remaining;
+        if (editButtonRef.current) editButtonRef.current.style.opacity = remaining;
+      }
+    },
+    onSwipedLeft: (data) => {
+      if (isOpen) return;
+      // A native click still fires after this release regardless of drag
+      // distance (mouse input synthesizes one unconditionally) — mark this
+      // as a swipe *before* checking whether it was far enough to commit,
+      // so that stray click can't fall through to tap-to-complete below.
       swipingRef.current = true;
-      if (!isSimulating && onEdit) onEdit(chore.id);
+      // react-swipeable's own `delta` (below) is intentionally tiny so the
+      // drag tracks the finger in real time from the first few pixels —
+      // whether that ends up committing to open is decided here instead,
+      // against our own much larger SWIPE_TRIGGER_DISTANCE.
+      if (data.absX < SWIPE_TRIGGER_DISTANCE) return;
+      if (isSimulating) return;
+      justCommittedRef.current = true;
+      commitOpen();
+    },
+    onSwipedRight: (data) => {
+      if (!isOpen) return;
+      // Same reasoning as onSwipedLeft above — mark as a swipe before the
+      // distance check so a short "attempted close" can't fall through to
+      // the stray click and close anyway.
+      swipingRef.current = true;
+      if (data.absX < SWIPE_TRIGGER_DISTANCE) return;
+      justCommittedRef.current = true;
+      commitClose();
     },
     onTouchStartOrOnMouseDown: () => {
       swipingRef.current = false;
     },
-    delta: 50,
+    onTouchEndOrOnMouseUp: () => {
+      // onSwiped(Dir) and this both fire on the same release — skip the
+      // reset this one time so it doesn't immediately undo the commit we
+      // just made above.
+      if (justCommittedRef.current) {
+        justCommittedRef.current = false;
+        return;
+      }
+      // Gesture didn't cross the threshold — revert to wherever it already
+      // was (open or closed), not always back to closed.
+      animateTo(isOpen);
+    },
+    // Deliberately small (react-swipeable's own default) — this only gates
+    // when a drag is recognized as a swipe at all, so onSwiping starts
+    // firing almost immediately for true 1:1 finger tracking in both
+    // directions. It used to be set to SWIPE_TRIGGER_DISTANCE itself, which
+    // suppressed onSwiping entirely for the first 120px of every gesture —
+    // the drag visually did nothing until crossing that threshold, then
+    // jumped straight to the clamped end position. That's exactly what read
+    // as "not reacting in real time" and "can't swipe back right after
+    // lifting a finger" (a fresh gesture starts the 120px count over).
+    delta: 10,
     trackMouse: true,
     // Passive touch listeners (the default when this is false) let iOS
     // Safari's own scroll/gesture recognizer claim the touch sequence before
@@ -55,74 +185,122 @@ export default function ChoreTimerBar({
     preventScrollOnSwipe: true,
   });
 
-  function resetTask() {
+  function handleBarClick() {
     if (isSimulating) return;
     if (swipingRef.current) {
       swipingRef.current = false;
       return;
     }
+    if (isOpen) {
+      commitClose();
+      return;
+    }
     onComplete(chore.id, new Date());
   }
 
+  function handleDeleteTap(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (isSimulating) return;
+    commitClose();
+    onDelete(chore.id);
+  }
+
+  function handleEditTap(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (isSimulating || !onEdit) return;
+    commitClose();
+    onEdit(chore.id);
+  }
+
   return (
-    <div
-      {...swipeHandlers}
-      data-testid="chore-bar"
-      className={`relative h-20 sm:h-16 w-full bg-gray-800 rounded-full shadow overflow-hidden touch-pan-y ${isSimulating ? 'cursor-not-allowed opacity-60 pointer-events-none' : 'cursor-pointer'}`}
-      onClick={resetTask}
-    >
-      <ProgressBar width={barWidth} color={barColor} />
-      <div className="absolute inset-0 px-4 grid grid-cols-3 items-center gap-2">
-        <ChoreInfo name={chore.name} />
-        <div className="text-xs text-white text-opacity-80 text-center">Every {chore.frequency} days</div>
-        <CompletionInfo date={chore.dateLastCompleted} daysSince={daysSince} timezone={timezone} />
+    <div className="relative h-20 sm:h-16 w-full">
+      {/* Background layer: floating circular buttons on the page's own
+          background (no rectangular block behind them), matching iOS
+          Messages' swipe actions — edit sits next to delete so a single
+          left-swipe reveals both, rather than each living behind its own
+          opposite-direction swipe. Fades in as a preview while dragging,
+          then becomes real pressable buttons once the swipe commits and
+          holds the row open — swiping alone never performs the action. */}
+      <div className="absolute inset-0 flex items-center justify-end gap-3 px-3">
+        {onEdit && (
+          <button
+            ref={editButtonRef}
+            type="button"
+            disabled={!isOpen}
+            onClick={handleEditTap}
+            aria-label="Confirm edit"
+            data-testid="edit-icon-preview"
+            className={`h-12 w-12 rounded-full flex items-center justify-center bg-indigo-600 text-white opacity-0 ${isOpen ? '' : 'pointer-events-none'}`}
+          >
+            <Pencil size={20} />
+          </button>
+        )}
+        <button
+          ref={deleteButtonRef}
+          type="button"
+          disabled={!isOpen}
+          onClick={handleDeleteTap}
+          aria-label="Confirm delete"
+          data-testid="delete-icon-preview"
+          className={`h-12 w-12 rounded-full flex items-center justify-center bg-red-600 text-white opacity-0 ${isOpen ? '' : 'pointer-events-none'}`}
+        >
+          <Trash2 size={20} />
+        </button>
       </div>
 
-      {isOverdue && <span className="sr-only">Overdue</span>}
-
-      {/* Persistent visible cue that this row is swipeable — visible on every
-          render, on every platform, unlike the sr-only buttons below which
-          only appear on keyboard focus. */}
-      <span
-        aria-hidden="true"
-        data-testid="swipe-hint-left"
-        className="absolute left-1 top-1/2 -translate-y-1/2 text-white text-opacity-30 text-lg leading-none pointer-events-none select-none"
+      <div
+        {...swipeHandlers}
+        ref={(el) => {
+          attachSwipeRef(el);
+          barRef.current = el;
+        }}
+        data-testid="chore-bar"
+        className={`relative h-full w-full bg-gray-800 rounded-full shadow overflow-hidden touch-pan-y ${isSimulating ? 'cursor-not-allowed opacity-60 pointer-events-none' : 'cursor-pointer'}`}
+        onClick={handleBarClick}
       >
-        ‹
-      </span>
-      <span
-        aria-hidden="true"
-        data-testid="swipe-hint-right"
-        className="absolute right-1 top-1/2 -translate-y-1/2 text-white text-opacity-30 text-lg leading-none pointer-events-none select-none"
-      >
-        ›
-      </span>
+        <ProgressBar width={barWidth} color={barColor} />
+        {/* Name gets the biggest share (2fr) since it's the only free-text,
+            unbounded-length field here — "Every N days" and the completion
+            date are both short, fixed-format strings that never needed as
+            much room as an equal 3-way split gave them. */}
+        <div className="absolute inset-0 px-4 grid grid-cols-[2fr_0.8fr_1.4fr] items-center gap-2">
+          <ChoreInfo name={chore.name} />
+          <div className="text-xs text-white text-opacity-80 text-center">Every {chore.frequency} days</div>
+          <CompletionInfo
+            date={chore.dateLastCompleted}
+            daysSince={daysSince}
+            householdTimezone={householdTimezone}
+          />
+        </div>
 
-      {/* Swipe is the primary delete/edit affordance (F5); these sr-only buttons are the keyboard/AT fallback. */}
-      {onEdit && (
+        {isOverdue && <span className="sr-only">Overdue</span>}
+
+        {/* Swipe is the primary delete/edit affordance (F5); these sr-only buttons are the keyboard/AT fallback. */}
+        {onEdit && (
+          <button
+            type="button"
+            className="sr-only focus:not-sr-only focus:absolute focus:right-12 focus:top-1/2 focus:-translate-y-1/2 focus:z-10 focus:px-3 focus:py-1 focus:bg-indigo-600 focus:text-white focus:text-sm focus:rounded-full"
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit(chore.id);
+            }}
+            aria-label="Edit chore"
+          >
+            Edit chore
+          </button>
+        )}
         <button
           type="button"
-          className="sr-only focus:not-sr-only focus:absolute focus:right-12 focus:top-1/2 focus:-translate-y-1/2 focus:z-10 focus:px-3 focus:py-1 focus:bg-indigo-600 focus:text-white focus:text-sm focus:rounded-full"
+          className="sr-only focus:not-sr-only focus:absolute focus:right-3 focus:top-1/2 focus:-translate-y-1/2 focus:z-10 focus:px-3 focus:py-1 focus:bg-red-600 focus:text-white focus:text-sm focus:rounded-full"
           onClick={(e) => {
             e.stopPropagation();
-            onEdit(chore.id);
+            onDelete(chore.id);
           }}
-          aria-label="Edit chore"
+          aria-label="Delete chore"
         >
-          Edit chore
+          Delete chore
         </button>
-      )}
-      <button
-        type="button"
-        className="sr-only focus:not-sr-only focus:absolute focus:right-3 focus:top-1/2 focus:-translate-y-1/2 focus:z-10 focus:px-3 focus:py-1 focus:bg-red-600 focus:text-white focus:text-sm focus:rounded-full"
-        onClick={(e) => {
-          e.stopPropagation();
-          onDelete(chore.id);
-        }}
-        aria-label="Delete chore"
-      >
-        Delete chore
-      </button>
+      </div>
     </div>
   );
 }

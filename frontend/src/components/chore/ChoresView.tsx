@@ -11,6 +11,8 @@ import { useOutbox } from '../../outbox/useOutbox';
 import type { ChorePayload, FlushResult, Outbox, OutboxEntry } from '../../outbox/outbox';
 import { readChoresCache, writeChoresCache } from '../../cache/choresCache';
 import { apiFetch } from '../../utils/api';
+import { getDeviceTimezone } from '@utils/deviceTimezone';
+import { cityLabel, utcOffsetLabel } from '@utils/timezones';
 
 type ChoreWire = Omit<Chore, 'dateLastCompleted'> & { dateLastCompleted: string; version: number };
 type ChoreWithVersion = Chore & { version: number };
@@ -23,7 +25,6 @@ function wireToChore(wire: ChoreWire): ChoreWithVersion {
 
 type ChoresViewProps = {
   householdTimezone: string;
-  timezone: string;
   outbox?: Outbox;
   selectedRoom?: string;
   rooms: Room[];
@@ -83,12 +84,17 @@ async function mutate<T>({
 
 export default function ChoresView({
   householdTimezone,
-  timezone,
   outbox: outboxProp,
   selectedRoom = 'all',
   rooms,
 }: ChoresViewProps) {
   const today = useMidnightClock(householdTimezone);
+  // Chore due dates/ordering run entirely on the household's clock (not the
+  // viewer's device), so a member whose device disagrees with it should know
+  // why a chore might look due/overdue at a time that doesn't match their
+  // own local clock.
+  const deviceTimezone = getDeviceTimezone();
+  const timezoneMismatch = deviceTimezone !== householdTimezone;
   const [chores, setChores] = useState<ChoreWithVersion[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -230,19 +236,26 @@ export default function ChoresView({
           message="Showing cached data — you're offline or the server is unreachable."
         />
       )}
-      <div className="flex justify-end p-4">
+      <div className="flex items-center p-4">
+        {timezoneMismatch && (
+          <span data-testid="timezone-mismatch-notice" className="text-amber-400 text-xs mr-3">
+            Your device is set to {cityLabel(deviceTimezone)} ({utcOffsetLabel(deviceTimezone)}), but this
+            household runs on {cityLabel(householdTimezone)} ({utcOffsetLabel(householdTimezone)}) — due dates
+            use the household's clock.
+          </span>
+        )}
         <button
           type="button"
           onClick={() => setIsAddOpen(true)}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 px-4 rounded-lg"
+          className="ml-auto bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 px-4 rounded-lg"
         >
           + Add Chore
         </button>
       </div>
       <ChoreList
-        chores={orderChores(visibleChores, today)}
+        chores={orderChores(visibleChores, today, householdTimezone)}
         day={today}
-        timezone={timezone}
+        householdTimezone={householdTimezone}
         isSimulating={false}
         onComplete={handleComplete}
         onDelete={handleDelete}
@@ -251,6 +264,7 @@ export default function ChoresView({
       {isAddOpen && (
         <ChoreFormModal
           mode="add"
+          defaultRoomId={selectedRoom}
           rooms={rooms}
           onSubmit={handleAddSubmit}
           onCancel={() => setIsAddOpen(false)}

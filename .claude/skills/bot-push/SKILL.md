@@ -15,8 +15,15 @@ Scripts already in the repo (don't recreate them):
 - `.claude/scripts/generate-gh-token.sh` — mints a short-lived (1hr) installation token
 - `.claude/scripts/gh-app-push.sh <branch>` — pushes a branch as the bot (refuses `main`/`master` and
   refuses anything that looks like a force flag in the branch-name argument)
+- `.claude/scripts/gh-app-force-push.sh <branch>` — force-push escape hatch (refuses `main`/`master`)
+- `.claude/scripts/gh-app-pr-create.sh <branch> <title>` — opens a PR as the bot; body read from stdin
+- `.claude/scripts/gh-app-pr-verify.sh <pr-number>` — prints PR + commit authorship for verification
 - `.claude/scripts/gh-app-askpass.sh` — `GIT_ASKPASS` helper so the token never appears in anything git
   prints (push progress, the upstream-tracking message, `git remote -v`)
+
+All four `gh-app-*.sh` scripts are allow-listed as single Bash prefixes, so use them instead of
+assembling `unset GH_TOKEN; APP_TOKEN=$(...)` inline — an inline compound command doesn't match a
+fixed allow-list prefix and re-prompts for approval every time.
 
 Bot identity for git authorship: name `c4i-claude-bot[bot]`, email
 `300508129+c4i-claude-bot[bot]@users.noreply.github.com` (GitHub's standard bot noreply format — user ID
@@ -78,12 +85,7 @@ above), a plain push will be rejected — force-push is warranted here specifica
 branch, pushed by you moments earlier, nothing else could have landed on it in between:
 
 ```bash
-unset GH_TOKEN
-APP_TOKEN=$(.claude/scripts/generate-gh-token.sh)
-export APP_TOKEN
-GIT_ASKPASS="$PWD/.claude/scripts/gh-app-askpass.sh" GIT_TERMINAL_PROMPT=0 git \
-  -c credential.helper= push --force -u "https://github.com/GPropersi/chore-reaper.git" <branch-name>
-unset APP_TOKEN
+.claude/scripts/gh-app-force-push.sh <branch-name>   # never main/master; the script itself refuses those
 ```
 
 ## Opening the PR
@@ -94,11 +96,9 @@ authored by the App, and needs `--head` explicitly — upstream tracking often f
 happens), so don't rely on a plain `gh pr create` picking up the branch automatically:
 
 ```bash
-unset GH_TOKEN
-APP_TOKEN=$(.claude/scripts/generate-gh-token.sh)
-GH_TOKEN="$APP_TOKEN" gh pr create --repo GPropersi/chore-reaper \
-  --head <branch-name> --base main --title "..." --body "..."
-unset APP_TOKEN
+.claude/scripts/gh-app-pr-create.sh <branch-name> "<title>" <<'EOF'
+<body>
+EOF
 ```
 
 ## Verify before reporting success
@@ -108,21 +108,20 @@ bot-only attribution, since a leftover trailer or a commit made before switching
 miss otherwise:
 
 ```bash
-unset GH_TOKEN
-APP_TOKEN=$(.claude/scripts/generate-gh-token.sh)
-GH_TOKEN="$APP_TOKEN" gh pr view <number> --repo GPropersi/chore-reaper \
-  --json author,commits --jq '{author: .author.login, commitAuthors: [.commits[].authors[].login] | unique}'
-unset APP_TOKEN
+.claude/scripts/gh-app-pr-verify.sh <number>
 ```
 Expect `author: "app/c4i-claude-bot"` and `commitAuthors: ["c4i-claude-bot[bot]"]` — nothing else. If a
 second login shows up (e.g. `"claude"` from a leftover trailer, or the human's own login from an
 un-rewritten commit), go back and fix authorship/trailers before telling the user it's done.
 
-## Guardrails (same as gh-app-push.sh already enforces, restated for anything done manually)
+## Guardrails (enforced by the scripts themselves)
 
-- Never push directly to `main`/`master` through this flow — feature branches + PR only.
+- Never push directly to `main`/`master` through this flow — feature branches + PR only. All four
+  `gh-app-*.sh` scripts refuse a `main`/`master` target.
 - Never pass `--force`/`-f` through `gh-app-push.sh`'s branch-name argument (it explicitly rejects
-  anything force-flag-shaped) — the manual force-push recipe above is the deliberate escape hatch, used
-  only for a branch you and only you pushed moments earlier.
-- The token is short-lived (1hr) — regenerate a fresh one per command rather than reusing a captured
-  value across a long gap.
+  anything force-flag-shaped) — `gh-app-force-push.sh` is the deliberate escape hatch, used only for a
+  branch you and only you pushed moments earlier.
+- The token is short-lived (1hr) — each script regenerates a fresh one per invocation rather than
+  reusing a captured value across a long gap.
+- Don't assemble `unset GH_TOKEN; APP_TOKEN=$(...)` inline — always go through one of the
+  `gh-app-*.sh` scripts so the command stays a single allow-listable prefix.

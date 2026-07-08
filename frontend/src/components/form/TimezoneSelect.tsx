@@ -1,4 +1,4 @@
-import { IANA_TIMEZONES } from '../../utils/timezones';
+import { MAJOR_TIMEZONES, utcOffsetLabel } from '../../utils/timezones';
 
 type TimezoneSelectProps = {
   id: string;
@@ -27,12 +27,13 @@ export default function TimezoneSelect({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         required={required}
-        className="bg-gray-700 text-white rounded px-3 py-2 text-sm"
+        // 16px below sm avoids iOS Safari's zoom-on-focus for <select>.
+        className="bg-gray-700 text-white rounded px-3 py-2 text-base sm:text-sm"
       >
         {allowUnset && <option value="">Same as household</option>}
-        {IANA_TIMEZONES.map((tz) => (
-          <option key={tz} value={tz}>
-            {tz}
+        {MAJOR_TIMEZONES.map((tz) => (
+          <option key={tz.value} value={tz.value}>
+            {tz.city} ({utcOffsetLabel(tz.value)})
           </option>
         ))}
       </select>

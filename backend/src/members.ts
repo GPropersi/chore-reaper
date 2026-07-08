@@ -2,13 +2,12 @@ export type MemberWire = {
   id: number;
   householdId: number;
   email: string;
-  role: 'admin' | 'user';
+  isAdmin: boolean;
   timezone: string | null;
 };
 
 export type MemberInput = {
   email: string;
-  role: 'admin' | 'user';
   timezone?: string | null;
 };
 
@@ -16,7 +15,7 @@ type MembershipListRow = {
   id: number;
   household_id: number;
   email: string;
-  role: 'admin' | 'user';
+  is_admin: number;
   timezone: string | null;
 };
 
@@ -24,7 +23,7 @@ export async function getMembersByHousehold(db: D1Database, householdId: number)
   const result = await db
     .prepare(
       `SELECT u.id AS id, hm.household_id AS household_id, u.email AS email,
-              hm.role AS role, u.timezone AS timezone
+              u.is_admin AS is_admin, u.timezone AS timezone
        FROM household_members hm
        JOIN users u ON u.id = hm.user_id
        WHERE hm.household_id = ?
@@ -36,7 +35,7 @@ export async function getMembersByHousehold(db: D1Database, householdId: number)
     id: row.id,
     householdId: row.household_id,
     email: row.email,
-    role: row.role,
+    isAdmin: row.is_admin === 1,
     timezone: row.timezone,
   }));
 }
@@ -52,14 +51,14 @@ export async function addHouseholdMember(
   householdId: number,
   input: MemberInput,
   invitedBy: number,
-  callerRole: 'admin' | 'user',
+  callerIsAdmin: boolean,
 ): Promise<AddHouseholdMemberResult> {
   const email = input.email.trim().toLowerCase();
 
   const existing = await db
-    .prepare('SELECT id, email, timezone FROM users WHERE email = ?')
+    .prepare('SELECT id, email, timezone, is_admin FROM users WHERE email = ?')
     .bind(email)
-    .first<{ id: number; email: string; timezone: string | null }>();
+    .first<{ id: number; email: string; timezone: string | null; is_admin: number }>();
 
   if (existing) {
     // Any household member — admin or not — can add someone who already has
@@ -73,8 +72,8 @@ export async function addHouseholdMember(
     }
 
     await db
-      .prepare('INSERT INTO household_members (user_id, household_id, role, invited_by) VALUES (?, ?, ?, ?)')
-      .bind(existing.id, householdId, input.role, invitedBy)
+      .prepare('INSERT INTO household_members (user_id, household_id, invited_by) VALUES (?, ?, ?)')
+      .bind(existing.id, householdId, invitedBy)
       .run();
 
     return {
@@ -83,7 +82,7 @@ export async function addHouseholdMember(
         id: existing.id,
         householdId,
         email: existing.email,
-        role: input.role,
+        isAdmin: existing.is_admin === 1,
         timezone: existing.timezone,
       },
     };
@@ -91,26 +90,21 @@ export async function addHouseholdMember(
 
   // Brand-new person — this is the one action that's actually admin-gated:
   // creating a new users row is "adding a user to the app," distinct from
-  // adding an existing user as a member of this household.
-  if (callerRole !== 'admin') {
+  // adding an existing user as a member of this household. Admin status is
+  // global, so this is a straight boolean check, not a per-household lookup.
+  if (!callerIsAdmin) {
     return { status: 'new_user_requires_admin' };
   }
 
-  // `users.household_id`/`role`/`invited_by` are still physically NOT NULL
-  // columns (a follow-up migration removes them once the household_members
-  // cutover is verified in production), so this keeps writing a value into
-  // them for constraint compliance — application code never reads them
-  // back; household_members is the sole source of truth for household/role
-  // from here.
   const result = await db
-    .prepare('INSERT INTO users (household_id, email, role, timezone, invited_by) VALUES (?, ?, ?, ?, ?)')
-    .bind(householdId, email, input.role, input.timezone ?? null, invitedBy)
+    .prepare('INSERT INTO users (email, timezone) VALUES (?, ?)')
+    .bind(email, input.timezone ?? null)
     .run();
   const newUserId = result.meta.last_row_id;
 
   await db
-    .prepare('INSERT INTO household_members (user_id, household_id, role, invited_by) VALUES (?, ?, ?, ?)')
-    .bind(newUserId, householdId, input.role, invitedBy)
+    .prepare('INSERT INTO household_members (user_id, household_id, invited_by) VALUES (?, ?, ?)')
+    .bind(newUserId, householdId, invitedBy)
     .run();
 
   const row = await db
@@ -120,7 +114,7 @@ export async function addHouseholdMember(
 
   return {
     status: 'created',
-    member: { id: row!.id, householdId, email: row!.email, role: input.role, timezone: row!.timezone },
+    member: { id: row!.id, householdId, email: row!.email, isAdmin: false, timezone: row!.timezone },
   };
 }
 

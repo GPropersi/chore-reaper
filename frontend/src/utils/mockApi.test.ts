@@ -25,12 +25,13 @@ describe('mockFetch: /api/me', () => {
     expect(res.status).toBe(200);
     const me = await json<{
       email: string;
+      isAdmin: boolean;
       currentHouseholdId: number;
-      memberships: { householdId: number; role: string }[];
+      memberships: { householdId: number }[];
     }>(res);
     expect(me.email).toBeTruthy();
     expect(me.memberships).toHaveLength(1);
-    expect(me.memberships[0].role).toBe('admin');
+    expect(me.isAdmin).toBe(true);
     expect(me.currentHouseholdId).toBe(me.memberships[0].householdId);
   });
 });
@@ -145,7 +146,7 @@ describe('mockFetch: /api/members', () => {
   it('POST creates a member and it appears in a subsequent GET', async () => {
     const createRes = await mockFetch('/api/members', {
       method: 'POST',
-      body: JSON.stringify({ email: 'preview@example.com', role: 'user' }),
+      body: JSON.stringify({ email: 'preview@example.com' }),
     });
     expect(createRes.status).toBe(201);
 
@@ -162,6 +163,21 @@ describe('mockFetch: /api/members', () => {
 
     const after = await json<{ data: { id: number }[] }>(await mockFetch('/api/members'));
     expect(after.data.map((m) => m.id)).not.toContain(target.id);
+  });
+});
+
+describe('mockFetch: /api/admin/users', () => {
+  it('returns every seeded member reshaped with a households array', async () => {
+    const res = await mockFetch('/api/admin/users');
+    expect(res.status).toBe(200);
+    const body = await json<{
+      data: { email: string; isAdmin: boolean; households: { id: number; name: string }[] }[];
+    }>(res);
+
+    expect(body.data.length).toBeGreaterThan(0);
+    const admin = body.data.find((u) => u.email === 'preview@example.com');
+    expect(admin?.isAdmin).toBe(true);
+    expect(admin?.households).toEqual([{ id: 1, name: 'Preview Household' }]);
   });
 });
 

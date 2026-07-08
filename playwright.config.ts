@@ -4,6 +4,15 @@ export default defineConfig({
   testDir: './e2e',
   globalSetup: './e2e/global-setup.ts',
   fullyParallel: false,
+  // All spec files share one seeded household against one local D1 (global-setup
+  // runs once for the whole suite, not per file) — offline-outbox.spec.ts in
+  // particular creates/deletes real chores against it mid-test. `fullyParallel:
+  // false` only serializes tests *within* a file; different files still land on
+  // separate workers by default and can race each other's mutations, which is
+  // what caused timezone-parity.spec.ts to intermittently see 3 chores instead
+  // of the 2 seeded ones. `workers: 1` forces every file to run strictly
+  // serially against the shared state.
+  workers: 1,
   use: {
     baseURL: 'http://localhost:5173',
   },
