@@ -19,7 +19,7 @@ afterEach(() => {
 });
 
 describe('ChoreTimerBar', () => {
-  it('renders visible swipe-hint chevrons unconditionally, not just on focus', () => {
+  it('renders a visible swipe-hint chevron unconditionally, not just on focus', () => {
     render(
       <ChoreTimerBar
         chore={chore}
@@ -33,10 +33,9 @@ describe('ChoreTimerBar', () => {
     );
 
     expect(screen.getByTestId('swipe-hint-left')).toBeInTheDocument();
-    expect(screen.getByTestId('swipe-hint-right')).toBeInTheDocument();
   });
 
-  it('keeps the swipe-hint chevrons non-interactive so they never block a tap-to-complete', () => {
+  it('keeps the swipe-hint chevron non-interactive so it never blocks a tap-to-complete', () => {
     render(
       <ChoreTimerBar
         chore={chore}
@@ -50,7 +49,6 @@ describe('ChoreTimerBar', () => {
     );
 
     expect(screen.getByTestId('swipe-hint-left')).toHaveClass('pointer-events-none');
-    expect(screen.getByTestId('swipe-hint-right')).toHaveClass('pointer-events-none');
   });
 
   it('computes "days ago" using the household timezone\'s day boundary, not the runtime default', () => {

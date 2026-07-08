@@ -21,13 +21,13 @@ type ChoreTimerBarProps = {
 };
 
 // How far the row must be dragged before a swipe "commits" to opening the
-// action button underneath, rather than springing back to closed.
+// action buttons underneath, rather than springing back to closed.
 const SWIPE_TRIGGER_DISTANCE = 120;
-// How far the row stays parked once opened — leaves enough room for the
-// circular button (h-12/w-12, see below) plus a visible gap on both sides,
-// matching iOS Messages' floating circular swipe actions rather than a
-// flush rectangular block.
-const OPEN_OFFSET = 80;
+// How far the row stays parked once opened — enough room for both circular
+// buttons (h-12/w-12) side by side with a gap, or just one if there's no
+// edit handler. Matches iOS Messages' floating circular swipe actions.
+const OPEN_OFFSET_BOTH = 150;
+const OPEN_OFFSET_DELETE_ONLY = 80;
 
 export default function ChoreTimerBar({
   chore,
@@ -48,12 +48,15 @@ export default function ChoreTimerBar({
   );
 
   const { isOverdue, barWidth, barColor } = computeBar(daysSince, chore.frequency);
+  const openOffset = onEdit ? OPEN_OFFSET_BOTH : OPEN_OFFSET_DELETE_ONLY;
 
-  // Swiping no longer performs delete/edit directly — it reveals a real,
-  // pressable button underneath and holds the row open (like iOS Mail),
-  // so a completed swipe gesture can't by itself delete anything; a
-  // separate, deliberate tap on the revealed button is required.
-  const [openDirection, setOpenDirection] = useState<'left' | 'right' | null>(null);
+  // Swiping no longer performs delete/edit directly — a single left-swipe
+  // reveals both real, pressable buttons together and holds the row open
+  // (like iOS Mail), so a completed swipe gesture can't by itself delete
+  // anything; a separate, deliberate tap on a revealed button is required.
+  // Only one direction does anything now — edit lives next to delete
+  // instead of behind its own opposite-direction swipe.
+  const [isOpen, setIsOpen] = useState(false);
 
   const swipingRef = useRef(false);
   const justOpenedRef = useRef(false);
@@ -74,33 +77,28 @@ export default function ChoreTimerBar({
     }
   }
 
-  function openToward(direction: 'left' | 'right') {
-    setOpenDirection(direction);
+  function open() {
+    setIsOpen(true);
     const el = barRef.current;
     if (el) {
       el.style.transition = 'transform 150ms ease-out';
-      el.style.transform = `translateX(${direction === 'left' ? -OPEN_OFFSET : OPEN_OFFSET}px)`;
+      el.style.transform = `translateX(-${openOffset}px)`;
     }
-    const revealed = direction === 'left' ? deleteButtonRef.current : editButtonRef.current;
-    const other = direction === 'left' ? editButtonRef.current : deleteButtonRef.current;
-    if (revealed) {
-      revealed.style.transition = 'opacity 150ms ease-out';
-      revealed.style.opacity = '1';
-    }
-    if (other) {
-      other.style.transition = 'opacity 150ms ease-out';
-      other.style.opacity = '0';
+    for (const btn of [editButtonRef.current, deleteButtonRef.current]) {
+      if (!btn) continue;
+      btn.style.transition = 'opacity 150ms ease-out';
+      btn.style.opacity = '1';
     }
   }
 
   function closeSwipe() {
-    setOpenDirection(null);
+    setIsOpen(false);
     snapBack();
   }
 
   const { ref: attachSwipeRef, ...swipeHandlers } = useSwipeable({
     onSwipeStart: () => {
-      if (openDirection) return;
+      if (isOpen) return;
       const el = barRef.current;
       if (el) el.style.transition = 'none';
       for (const btn of [editButtonRef.current, deleteButtonRef.current]) {
@@ -108,59 +106,47 @@ export default function ChoreTimerBar({
       }
     },
     onSwiping: ({ deltaX, dir }: SwipeEventData) => {
-      // Once open, further drags are ignored — tap the revealed button or
-      // tap the row to close, rather than fighting the anchored position.
-      if (openDirection) return;
+      // Once open, further drags are ignored — tap a revealed button or tap
+      // the row to close, rather than fighting the anchored position.
+      // Swiping right does nothing — only left reveals the action buttons.
+      if (isOpen || dir !== 'Left') return;
       const el = barRef.current;
-      if (!el || (dir !== 'Left' && dir !== 'Right')) return;
+      if (!el) return;
       const clamped = Math.max(-SWIPE_TRIGGER_DISTANCE, Math.min(SWIPE_TRIGGER_DISTANCE, deltaX));
       el.style.transform = `translateX(${clamped}px)`;
 
-      // Swiping left previews delete (trash icon on the right, where the
-      // bar is sliding away from); swiping right previews edit (pencil
-      // icon on the left). Opacity ramps with drag distance so the icon
-      // previews the action instead of appearing abruptly at the end.
+      // Opacity ramps with drag distance so the buttons preview the reveal
+      // instead of appearing abruptly once the swipe commits.
       const progress = Math.min(1, Math.abs(clamped) / SWIPE_TRIGGER_DISTANCE);
-      if (deleteButtonRef.current) {
-        deleteButtonRef.current.style.opacity = dir === 'Left' ? String(progress) : '0';
-      }
-      if (editButtonRef.current) {
-        editButtonRef.current.style.opacity = dir === 'Right' ? String(progress) : '0';
-      }
+      if (deleteButtonRef.current) deleteButtonRef.current.style.opacity = String(progress);
+      if (editButtonRef.current) editButtonRef.current.style.opacity = String(progress);
     },
     onSwipedLeft: () => {
-      if (openDirection) return;
+      if (isOpen) return;
       swipingRef.current = true;
       if (isSimulating) return;
       justOpenedRef.current = true;
-      openToward('left');
-    },
-    onSwipedRight: () => {
-      if (openDirection) return;
-      swipingRef.current = true;
-      if (isSimulating || !onEdit) return;
-      justOpenedRef.current = true;
-      openToward('right');
+      open();
     },
     onTouchStartOrOnMouseDown: () => {
       swipingRef.current = false;
     },
     onTouchEndOrOnMouseUp: () => {
-      // onSwiped(Dir) and this both fire on the same release — skip the
+      // onSwipedLeft and this both fire on the same release — skip the
       // reset this one time so it doesn't immediately undo the open we
       // just committed to above.
       if (justOpenedRef.current) {
         justOpenedRef.current = false;
         return;
       }
-      if (!openDirection) snapBack();
+      if (!isOpen) snapBack();
     },
     delta: SWIPE_TRIGGER_DISTANCE,
     trackMouse: true,
     // Passive touch listeners (the default when this is false) let iOS
     // Safari's own scroll/gesture recognizer claim the touch sequence before
-    // onSwipedLeft/onSwipedRight ever fire — true forces a non-passive
-    // listener so this element can actually win the gesture on iOS.
+    // onSwipedLeft ever fires — true forces a non-passive listener so this
+    // element can actually win the gesture on iOS.
     preventScrollOnSwipe: true,
   });
 
@@ -170,7 +156,7 @@ export default function ChoreTimerBar({
       swipingRef.current = false;
       return;
     }
-    if (openDirection) {
+    if (isOpen) {
       closeSwipe();
       return;
     }
@@ -195,29 +181,33 @@ export default function ChoreTimerBar({
     <div className="relative h-20 sm:h-16 w-full">
       {/* Background layer: floating circular buttons on the page's own
           background (no rectangular block behind them), matching iOS
-          Messages' swipe actions. Fades in as a preview while dragging,
-          then becomes a real pressable button once the swipe commits and
+          Messages' swipe actions — edit sits next to delete so a single
+          left-swipe reveals both, rather than each living behind its own
+          opposite-direction swipe. Fades in as a preview while dragging,
+          then becomes real pressable buttons once the swipe commits and
           holds the row open — swiping alone never performs the action. */}
-      <div className="absolute inset-0 flex items-center justify-between px-4">
-        <button
-          ref={editButtonRef}
-          type="button"
-          disabled={openDirection !== 'right'}
-          onClick={handleEditTap}
-          aria-label="Confirm edit"
-          data-testid="edit-icon-preview"
-          className={`h-12 w-12 rounded-full flex items-center justify-center bg-indigo-600 text-white opacity-0 ${openDirection === 'right' ? '' : 'pointer-events-none'}`}
-        >
-          <Pencil size={20} />
-        </button>
+      <div className="absolute inset-0 flex items-center justify-end gap-3 px-3">
+        {onEdit && (
+          <button
+            ref={editButtonRef}
+            type="button"
+            disabled={!isOpen}
+            onClick={handleEditTap}
+            aria-label="Confirm edit"
+            data-testid="edit-icon-preview"
+            className={`h-12 w-12 rounded-full flex items-center justify-center bg-indigo-600 text-white opacity-0 ${isOpen ? '' : 'pointer-events-none'}`}
+          >
+            <Pencil size={20} />
+          </button>
+        )}
         <button
           ref={deleteButtonRef}
           type="button"
-          disabled={openDirection !== 'left'}
+          disabled={!isOpen}
           onClick={handleDeleteTap}
           aria-label="Confirm delete"
           data-testid="delete-icon-preview"
-          className={`h-12 w-12 rounded-full flex items-center justify-center bg-red-600 text-white opacity-0 ${openDirection === 'left' ? '' : 'pointer-events-none'}`}
+          className={`h-12 w-12 rounded-full flex items-center justify-center bg-red-600 text-white opacity-0 ${isOpen ? '' : 'pointer-events-none'}`}
         >
           <Trash2 size={20} />
         </button>
@@ -255,13 +245,6 @@ export default function ChoreTimerBar({
           className="absolute left-1 top-1/2 -translate-y-1/2 text-white text-opacity-30 text-lg leading-none pointer-events-none select-none"
         >
           ‹
-        </span>
-        <span
-          aria-hidden="true"
-          data-testid="swipe-hint-right"
-          className="absolute right-1 top-1/2 -translate-y-1/2 text-white text-opacity-30 text-lg leading-none pointer-events-none select-none"
-        >
-          ›
         </span>
 
         {/* Swipe is the primary delete/edit affordance (F5); these sr-only buttons are the keyboard/AT fallback. */}
