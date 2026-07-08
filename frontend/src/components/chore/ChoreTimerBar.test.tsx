@@ -19,38 +19,6 @@ afterEach(() => {
 });
 
 describe('ChoreTimerBar', () => {
-  it('renders a visible swipe-hint chevron unconditionally, not just on focus', () => {
-    render(
-      <ChoreTimerBar
-        chore={chore}
-        day={new Date('2026-07-01T00:00:00.000Z')}
-        householdTimezone="UTC"
-        isSimulating={false}
-        onComplete={vi.fn()}
-        onDelete={vi.fn()}
-        onEdit={vi.fn()}
-      />,
-    );
-
-    expect(screen.getByTestId('swipe-hint-left')).toBeInTheDocument();
-  });
-
-  it('keeps the swipe-hint chevron non-interactive so it never blocks a tap-to-complete', () => {
-    render(
-      <ChoreTimerBar
-        chore={chore}
-        day={new Date('2026-07-01T00:00:00.000Z')}
-        householdTimezone="UTC"
-        isSimulating={false}
-        onComplete={vi.fn()}
-        onDelete={vi.fn()}
-        onEdit={vi.fn()}
-      />,
-    );
-
-    expect(screen.getByTestId('swipe-hint-left')).toHaveClass('pointer-events-none');
-  });
-
   it('computes "days ago" using the household timezone\'s day boundary, not the runtime default', () => {
     // Completed 23:30 UTC on Jan 1; "day" is 02:00 UTC on Jan 2 — only 2.5
     // hours later, but straddling the UTC midnight boundary.

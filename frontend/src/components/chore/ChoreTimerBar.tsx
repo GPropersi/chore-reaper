@@ -259,7 +259,11 @@ export default function ChoreTimerBar({
         onClick={handleBarClick}
       >
         <ProgressBar width={barWidth} color={barColor} />
-        <div className="absolute inset-0 px-4 grid grid-cols-3 items-center gap-2">
+        {/* Name gets the biggest share (2fr) since it's the only free-text,
+            unbounded-length field here — "Every N days" and the completion
+            date are both short, fixed-format strings that never needed as
+            much room as an equal 3-way split gave them. */}
+        <div className="absolute inset-0 px-4 grid grid-cols-[2fr_0.8fr_1.4fr] items-center gap-2">
           <ChoreInfo name={chore.name} />
           <div className="text-xs text-white text-opacity-80 text-center">Every {chore.frequency} days</div>
           <CompletionInfo
@@ -270,17 +274,6 @@ export default function ChoreTimerBar({
         </div>
 
         {isOverdue && <span className="sr-only">Overdue</span>}
-
-        {/* Persistent visible cue that this row is swipeable — visible on every
-            render, on every platform, unlike the sr-only buttons below which
-            only appear on keyboard focus. */}
-        <span
-          aria-hidden="true"
-          data-testid="swipe-hint-left"
-          className="absolute left-1 top-1/2 -translate-y-1/2 text-white text-opacity-30 text-lg leading-none pointer-events-none select-none"
-        >
-          ‹
-        </span>
 
         {/* Swipe is the primary delete/edit affordance (F5); these sr-only buttons are the keyboard/AT fallback. */}
         {onEdit && (
