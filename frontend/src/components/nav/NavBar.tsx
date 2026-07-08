@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import type { Room } from '@customTypes/SharedTypes';
 import RoomTab from './RoomTab';
 
@@ -26,6 +26,11 @@ export default function NavBar({
   currentHouseholdId,
   onSwitchHousehold,
 }: NavBarProps) {
+  // Room tabs' active state is otherwise driven purely by selectedRoom,
+  // which never resets on navigating away — so "All" stayed highlighted
+  // even while on /admin. Room tabs are only ever actually active on Home.
+  const isHome = useLocation().pathname === '/';
+
   return (
     <div id="NavBar" className="border-b border-gray-700 flex-shrink-0">
       <div className="container mx-auto flex items-center justify-between space-x-1 overflow-x-auto scrollbar-none">
@@ -47,13 +52,13 @@ export default function NavBar({
               ))}
             </select>
           )}
-          <RoomTab label="All" value="all" isActive={selectedRoom === 'all'} onClick={onSelect} />
+          <RoomTab label="All" value="all" isActive={isHome && selectedRoom === 'all'} onClick={onSelect} />
           {rooms.map((room) => (
             <RoomTab
               key={room.id}
               label={room.name}
               value={String(room.id)}
-              isActive={selectedRoom === String(room.id)}
+              isActive={isHome && selectedRoom === String(room.id)}
               onClick={onSelect}
             />
           ))}

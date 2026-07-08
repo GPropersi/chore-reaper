@@ -37,4 +37,20 @@ describe('NavBar', () => {
 
     expect(screen.getByTestId('admin-nav-link')).toHaveClass('text-indigo-400');
   });
+
+  it('does not leave "All" marked active while on the Admin route', () => {
+    render(
+      <MemoryRouter initialEntries={['/admin']}>
+        <NavBar rooms={[]} selectedRoom="all" onSelect={() => {}} isAdmin={true} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('button', { name: 'All' })).not.toHaveClass('text-indigo-400');
+  });
+
+  it('marks "All" active on Home, independent of the Admin link', () => {
+    renderNavBar(true);
+
+    expect(screen.getByRole('button', { name: 'All' })).toHaveClass('text-indigo-400');
+  });
 });
