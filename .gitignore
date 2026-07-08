@@ -12,3 +12,4 @@ blob-report/
 playwright/.cache/
 .claude/run-dev/
 changelog/
+backups/

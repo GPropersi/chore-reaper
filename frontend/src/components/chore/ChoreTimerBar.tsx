@@ -1,6 +1,8 @@
 import { useMemo, useRef } from 'react';
 import { useSwipeable } from 'react-swipeable';
+import type { SwipeEventData } from 'react-swipeable';
 import { differenceInDays, startOfDay } from 'date-fns';
+import { toZonedTime } from 'date-fns-tz';
 import type { Chore } from '@customTypes/SharedTypes';
 import { computeBar } from '@utils/choreBarMath';
 import ProgressBar from './ProgressBar';
@@ -10,7 +12,7 @@ import CompletionInfo from './CompletionInfo';
 type ChoreTimerBarProps = {
   chore: Chore;
   day: Date;
-  timezone: string;
+  householdTimezone: string;
   isSimulating: boolean;
   onComplete: (id: number, date: Date) => void;
   onDelete: (id: number) => void;
@@ -20,21 +22,50 @@ type ChoreTimerBarProps = {
 export default function ChoreTimerBar({
   chore,
   day,
-  timezone,
+  householdTimezone,
   isSimulating,
   onComplete,
   onDelete,
   onEdit,
 }: ChoreTimerBarProps) {
   const daysSince = useMemo(
-    () => differenceInDays(startOfDay(day), startOfDay(chore.dateLastCompleted)),
-    [day, chore.dateLastCompleted],
+    () =>
+      differenceInDays(
+        startOfDay(toZonedTime(day, householdTimezone)),
+        startOfDay(toZonedTime(chore.dateLastCompleted, householdTimezone)),
+      ),
+    [day, chore.dateLastCompleted, householdTimezone],
   );
 
   const { isOverdue, barWidth, barColor } = computeBar(daysSince, chore.frequency);
 
   const swipingRef = useRef(false);
-  const swipeHandlers = useSwipeable({
+  const barRef = useRef<HTMLDivElement>(null);
+
+  // The row itself never visibly moved during a swipe — onSwipedLeft/Right
+  // only fired once the gesture was already complete, with no feedback in
+  // between. Track deltaX directly on the DOM node (skipping React state) so
+  // the row follows the finger at native touchmove rate, then spring back.
+  const SWIPE_VISUAL_MAX = 80;
+
+  function snapBack() {
+    const el = barRef.current;
+    if (!el) return;
+    el.style.transition = 'transform 150ms ease-out';
+    el.style.transform = '';
+  }
+
+  const { ref: attachSwipeRef, ...swipeHandlers } = useSwipeable({
+    onSwipeStart: () => {
+      const el = barRef.current;
+      if (el) el.style.transition = 'none';
+    },
+    onSwiping: ({ deltaX, dir }: SwipeEventData) => {
+      const el = barRef.current;
+      if (!el || (dir !== 'Left' && dir !== 'Right')) return;
+      const clamped = Math.max(-SWIPE_VISUAL_MAX, Math.min(SWIPE_VISUAL_MAX, deltaX));
+      el.style.transform = `translateX(${clamped}px)`;
+    },
     onSwipedLeft: () => {
       swipingRef.current = true;
       if (!isSimulating) onDelete(chore.id);
@@ -46,6 +77,7 @@ export default function ChoreTimerBar({
     onTouchStartOrOnMouseDown: () => {
       swipingRef.current = false;
     },
+    onTouchEndOrOnMouseUp: snapBack,
     delta: 50,
     trackMouse: true,
     // Passive touch listeners (the default when this is false) let iOS
@@ -67,6 +99,10 @@ export default function ChoreTimerBar({
   return (
     <div
       {...swipeHandlers}
+      ref={(el) => {
+        attachSwipeRef(el);
+        barRef.current = el;
+      }}
       data-testid="chore-bar"
       className={`relative h-20 sm:h-16 w-full bg-gray-800 rounded-full shadow overflow-hidden touch-pan-y ${isSimulating ? 'cursor-not-allowed opacity-60 pointer-events-none' : 'cursor-pointer'}`}
       onClick={resetTask}
@@ -75,7 +111,11 @@ export default function ChoreTimerBar({
       <div className="absolute inset-0 px-4 grid grid-cols-3 items-center gap-2">
         <ChoreInfo name={chore.name} />
         <div className="text-xs text-white text-opacity-80 text-center">Every {chore.frequency} days</div>
-        <CompletionInfo date={chore.dateLastCompleted} daysSince={daysSince} timezone={timezone} />
+        <CompletionInfo
+          date={chore.dateLastCompleted}
+          daysSince={daysSince}
+          householdTimezone={householdTimezone}
+        />
       </div>
 
       {isOverdue && <span className="sr-only">Overdue</span>}

@@ -4,7 +4,7 @@ import ChoreTimerBar from './ChoreTimerBar';
 type ChoreListProps = {
   chores: Chore[];
   day: Date;
-  timezone: string;
+  householdTimezone: string;
   isSimulating: boolean;
   onComplete: (id: number, date: Date) => void;
   onDelete: (id: number) => void;
@@ -14,7 +14,7 @@ type ChoreListProps = {
 export default function ChoreList({
   chores,
   day,
-  timezone,
+  householdTimezone,
   isSimulating,
   onComplete,
   onDelete,
@@ -23,7 +23,7 @@ export default function ChoreList({
   if (chores.length === 0) {
     return (
       <div>
-        <p className="text-gray-400 text-center py-8">No chores yet — tap + Add Task to get started.</p>
+        <p className="text-gray-400 text-center py-8">No chores yet — tap + Add Chore to get started.</p>
       </div>
     );
   }
@@ -34,7 +34,7 @@ export default function ChoreList({
           <ChoreTimerBar
             chore={chore}
             day={day}
-            timezone={timezone}
+            householdTimezone={householdTimezone}
             isSimulating={isSimulating}
             onComplete={onComplete}
             onDelete={onDelete}

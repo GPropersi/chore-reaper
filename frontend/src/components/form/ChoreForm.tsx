@@ -13,16 +13,18 @@ type FormState = {
   longTermTask: boolean;
 };
 
-const initialFormState: FormState = {
-  name: '',
-  details: '',
-  roomId: '',
-  dateLastCompleted: '',
-  duration: '',
-  frequency: '',
-  urgency: '',
-  longTermTask: false,
-};
+function buildInitialFormState(defaultRoomId?: string): FormState {
+  return {
+    name: '',
+    details: '',
+    roomId: defaultRoomId && defaultRoomId !== 'all' ? defaultRoomId : '',
+    dateLastCompleted: '',
+    duration: '',
+    frequency: '',
+    urgency: '',
+    longTermTask: false,
+  };
+}
 
 function choreToFormState(chore: Chore): FormState {
   return {
@@ -40,14 +42,22 @@ function choreToFormState(chore: Chore): FormState {
 type ChoreFormProps = {
   mode?: 'add' | 'edit';
   initialChore?: Chore;
+  defaultRoomId?: string;
   rooms: Room[];
   onSubmit: (chore: Omit<Chore, 'id'>) => void;
   onCancel: () => void;
 };
 
-export default function ChoreForm({ mode = 'add', initialChore, rooms, onSubmit, onCancel }: ChoreFormProps) {
+export default function ChoreForm({
+  mode = 'add',
+  initialChore,
+  defaultRoomId,
+  rooms,
+  onSubmit,
+  onCancel,
+}: ChoreFormProps) {
   const [formData, setFormData] = useState<FormState>(() =>
-    initialChore ? choreToFormState(initialChore) : initialFormState,
+    initialChore ? choreToFormState(initialChore) : buildInitialFormState(defaultRoomId),
   );
 
   function handleFieldChange(name: string, value: string) {
@@ -67,7 +77,7 @@ export default function ChoreForm({ mode = 'add', initialChore, rooms, onSubmit,
       urgency: formData.urgency || undefined,
       longTermTask: formData.longTermTask || undefined,
     });
-    if (mode === 'add') setFormData(initialFormState);
+    if (mode === 'add') setFormData(buildInitialFormState(defaultRoomId));
   }
 
   return (
@@ -85,27 +95,6 @@ export default function ChoreForm({ mode = 'add', initialChore, rooms, onSubmit,
           autoFocus
         />
         <FormField name="details" label="Details" value={formData.details} onChange={handleFieldChange} />
-        <div className="flex flex-col gap-1">
-          <label htmlFor="roomId" className="text-sm text-gray-400">
-            Room
-          </label>
-          <select
-            id="roomId"
-            value={formData.roomId}
-            onChange={(e) => handleFieldChange('roomId', e.target.value)}
-            required
-            className="bg-gray-700 text-white rounded px-3 py-2 text-sm"
-          >
-            <option value="" disabled>
-              Select a room
-            </option>
-            {rooms.map((room) => (
-              <option key={room.id} value={room.id}>
-                {room.name}
-              </option>
-            ))}
-          </select>
-        </div>
         <FormField
           name="dateLastCompleted"
           label="Last Completed"
@@ -114,37 +103,61 @@ export default function ChoreForm({ mode = 'add', initialChore, rooms, onSubmit,
           type="date"
           required
         />
-        <FormField
-          name="duration"
-          label="Duration (minutes)"
-          value={formData.duration}
-          onChange={handleFieldChange}
-          type="number"
-          required
-        />
-        <FormField
-          name="frequency"
-          label="Frequency (days)"
-          value={formData.frequency}
-          onChange={handleFieldChange}
-          type="number"
-          required
-        />
-
-        <div className="flex flex-col gap-1">
-          <label className="text-sm text-gray-400">Urgency</label>
-          <select
-            value={formData.urgency}
-            onChange={(e) =>
-              setFormData((prev) => ({ ...prev, urgency: e.target.value as FormState['urgency'] }))
-            }
-            className="bg-gray-700 text-white rounded px-3 py-2 text-sm"
-          >
-            <option value="">None</option>
-            <option value="low">Low</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
-          </select>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="flex flex-col gap-1">
+            <label htmlFor="roomId" className="text-sm text-gray-400">
+              Room
+            </label>
+            <select
+              id="roomId"
+              value={formData.roomId}
+              onChange={(e) => handleFieldChange('roomId', e.target.value)}
+              required
+              className="bg-gray-700 text-white rounded px-3 py-2 text-sm"
+            >
+              <option value="" disabled>
+                Select a room
+              </option>
+              {rooms.map((room) => (
+                <option key={room.id} value={room.id}>
+                  {room.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-sm text-gray-400">Urgency</label>
+            <select
+              value={formData.urgency}
+              onChange={(e) =>
+                setFormData((prev) => ({ ...prev, urgency: e.target.value as FormState['urgency'] }))
+              }
+              className="bg-gray-700 text-white rounded px-3 py-2 text-sm"
+            >
+              <option value="">None</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField
+            name="duration"
+            label="Duration (minutes)"
+            value={formData.duration}
+            onChange={handleFieldChange}
+            type="number"
+            required
+          />
+          <FormField
+            name="frequency"
+            label="Frequency (days)"
+            value={formData.frequency}
+            onChange={handleFieldChange}
+            type="number"
+            required
+          />
         </div>
 
         <div className="flex items-center gap-2">

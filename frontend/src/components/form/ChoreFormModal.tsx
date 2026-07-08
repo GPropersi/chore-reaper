@@ -5,6 +5,7 @@ import ChoreForm from './ChoreForm';
 type ChoreFormModalProps = {
   mode?: 'add' | 'edit';
   initialChore?: Chore;
+  defaultRoomId?: string;
   rooms: Room[];
   onSubmit: (chore: Omit<Chore, 'id'>) => void;
   onCancel: () => void;
@@ -13,6 +14,7 @@ type ChoreFormModalProps = {
 export default function ChoreFormModal({
   mode,
   initialChore,
+  defaultRoomId,
   rooms,
   onSubmit,
   onCancel,
@@ -32,6 +34,7 @@ export default function ChoreFormModal({
       <ChoreForm
         mode={mode}
         initialChore={initialChore}
+        defaultRoomId={defaultRoomId}
         rooms={rooms}
         onSubmit={onSubmit}
         onCancel={onCancel}

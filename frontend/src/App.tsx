@@ -23,14 +23,27 @@ type Me = {
 
 type ApiResponse<T> = { success: boolean; data?: T; error?: string };
 
+const ROOMS_CACHE_KEY = 'rooms-cache-v1';
+
 function useRooms() {
   const [rooms, setRooms] = useState<Room[]>([]);
 
   useEffect(() => {
     apiFetch('/api/rooms')
       .then((res) => res.json() as Promise<ApiResponse<Room[]>>)
-      .then((body) => setRooms(body.data ?? []))
-      .catch(() => {});
+      .then((body) => {
+        const fetched = body.data ?? [];
+        localStorage.setItem(ROOMS_CACHE_KEY, JSON.stringify(fetched));
+        setRooms(fetched);
+      })
+      .catch(() => {
+        // Mirrors useMe's cache fallback below — without this, a single
+        // transient failure on first load left room tabs permanently empty
+        // for that page life (only chores/me had a fallback, so refresh was
+        // the only recovery).
+        const cached = localStorage.getItem(ROOMS_CACHE_KEY);
+        if (cached) setRooms(JSON.parse(cached) as Room[]);
+      });
   }, []);
 
   return { rooms, setRooms };
@@ -143,7 +156,6 @@ function Home({ me, currentMembership }: { me: Me | null; currentMembership: Mem
     <div className="p-4">
       <ChoresView
         householdTimezone={currentMembership.householdTimezone}
-        timezone={me.timezone}
         selectedRoom={selectedRoom}
         rooms={rooms}
       />
