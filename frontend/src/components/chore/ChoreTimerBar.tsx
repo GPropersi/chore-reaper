@@ -126,16 +126,29 @@ export default function ChoreTimerBar({
         if (editButtonRef.current) editButtonRef.current.style.opacity = remaining;
       }
     },
-    onSwipedLeft: () => {
+    onSwipedLeft: (data) => {
       if (isOpen) return;
+      // A native click still fires after this release regardless of drag
+      // distance (mouse input synthesizes one unconditionally) — mark this
+      // as a swipe *before* checking whether it was far enough to commit,
+      // so that stray click can't fall through to tap-to-complete below.
       swipingRef.current = true;
+      // react-swipeable's own `delta` (below) is intentionally tiny so the
+      // drag tracks the finger in real time from the first few pixels —
+      // whether that ends up committing to open is decided here instead,
+      // against our own much larger SWIPE_TRIGGER_DISTANCE.
+      if (data.absX < SWIPE_TRIGGER_DISTANCE) return;
       if (isSimulating) return;
       justCommittedRef.current = true;
       commitOpen();
     },
-    onSwipedRight: () => {
+    onSwipedRight: (data) => {
       if (!isOpen) return;
+      // Same reasoning as onSwipedLeft above — mark as a swipe before the
+      // distance check so a short "attempted close" can't fall through to
+      // the stray click and close anyway.
       swipingRef.current = true;
+      if (data.absX < SWIPE_TRIGGER_DISTANCE) return;
       justCommittedRef.current = true;
       commitClose();
     },
@@ -154,7 +167,16 @@ export default function ChoreTimerBar({
       // was (open or closed), not always back to closed.
       animateTo(isOpen);
     },
-    delta: SWIPE_TRIGGER_DISTANCE,
+    // Deliberately small (react-swipeable's own default) — this only gates
+    // when a drag is recognized as a swipe at all, so onSwiping starts
+    // firing almost immediately for true 1:1 finger tracking in both
+    // directions. It used to be set to SWIPE_TRIGGER_DISTANCE itself, which
+    // suppressed onSwiping entirely for the first 120px of every gesture —
+    // the drag visually did nothing until crossing that threshold, then
+    // jumped straight to the clamped end position. That's exactly what read
+    // as "not reacting in real time" and "can't swipe back right after
+    // lifting a finger" (a fresh gesture starts the 120px count over).
+    delta: 10,
     trackMouse: true,
     // Passive touch listeners (the default when this is false) let iOS
     // Safari's own scroll/gesture recognizer claim the touch sequence before
