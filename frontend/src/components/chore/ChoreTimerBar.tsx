@@ -49,7 +49,14 @@ export default function ChoreTimerBar({
   // only fired once the gesture was already complete, with no feedback in
   // between. Track deltaX directly on the DOM node (skipping React state) so
   // the row follows the finger at native touchmove rate, then spring back.
-  const SWIPE_VISUAL_MAX = 80;
+  //
+  // This distance also doubles as react-swipeable's own `delta` trigger
+  // threshold below — they used to be two separate numbers (80 here, 50
+  // there), so the action could fire before the drag/icon reveal had
+  // visually caught up, reading as "I barely swiped and it already
+  // deleted." Keeping one constant means the icon only reaches full
+  // opacity right as a release would actually trigger the action.
+  const SWIPE_TRIGGER_DISTANCE = 120;
 
   function snapBack() {
     const el = barRef.current;
@@ -75,14 +82,14 @@ export default function ChoreTimerBar({
     onSwiping: ({ deltaX, dir }: SwipeEventData) => {
       const el = barRef.current;
       if (!el || (dir !== 'Left' && dir !== 'Right')) return;
-      const clamped = Math.max(-SWIPE_VISUAL_MAX, Math.min(SWIPE_VISUAL_MAX, deltaX));
+      const clamped = Math.max(-SWIPE_TRIGGER_DISTANCE, Math.min(SWIPE_TRIGGER_DISTANCE, deltaX));
       el.style.transform = `translateX(${clamped}px)`;
 
       // Swiping left deletes, revealing the trash icon on the right (where
       // the bar is sliding away from); swiping right edits, revealing the
       // edit icon on the left. Opacity ramps with drag distance so the icon
       // previews the action instead of just appearing abruptly at the end.
-      const progress = Math.min(1, Math.abs(clamped) / SWIPE_VISUAL_MAX);
+      const progress = Math.min(1, Math.abs(clamped) / SWIPE_TRIGGER_DISTANCE);
       if (deleteIconRef.current) {
         deleteIconRef.current.style.opacity = dir === 'Left' ? String(progress) : '0';
       }
@@ -102,7 +109,7 @@ export default function ChoreTimerBar({
       swipingRef.current = false;
     },
     onTouchEndOrOnMouseUp: snapBack,
-    delta: 50,
+    delta: SWIPE_TRIGGER_DISTANCE,
     trackMouse: true,
     // Passive touch listeners (the default when this is false) let iOS
     // Safari's own scroll/gesture recognizer claim the touch sequence before
