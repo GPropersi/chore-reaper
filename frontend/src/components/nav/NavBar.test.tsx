@@ -12,14 +12,15 @@ function renderNavBar(isAdmin: boolean) {
 }
 
 describe('NavBar', () => {
-  it('renders an Admin entry when the current user is an admin', () => {
+  it('labels the House entry "House / Admin" when the current user is an admin', () => {
     renderNavBar(true);
-    expect(screen.getByTestId('admin-nav-link')).toBeInTheDocument();
+    expect(screen.getByTestId('admin-nav-link')).toHaveTextContent('House / Admin');
   });
 
-  it('omits the Admin entry when the current user is not an admin', () => {
+  it('labels the House entry just "House" when the current user is not an admin, but still shows it', () => {
     renderNavBar(false);
-    expect(screen.queryByTestId('admin-nav-link')).not.toBeInTheDocument();
+    expect(screen.getByTestId('admin-nav-link')).toHaveTextContent('House');
+    expect(screen.getByTestId('admin-nav-link')).not.toHaveTextContent('Admin');
   });
 
   it('does not mark the Admin link as active while on another route', () => {

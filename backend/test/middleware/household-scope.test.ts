@@ -54,7 +54,7 @@ async function seedHouseholdsAndUsers() {
     timezone: 'America/Chicago',
   });
   await seedHouseholdMember({ id: 2, householdId: 2, email: 'admin-b@example.com', role: 'admin' });
-  await seedHouseholdMember({ id: 3, householdId: 1, email: 'member-a@example.com', role: 'member' });
+  await seedHouseholdMember({ id: 3, householdId: 1, email: 'member-a@example.com', role: 'user' });
 }
 
 function authHeader(email: string) {
@@ -81,7 +81,7 @@ describe('householdScope', () => {
     const res = await appWithStubEmail('member-a@example.com').request('/whoami', {}, env);
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ userId: 3, householdId: 1, role: 'member', timezone: null });
+    expect(await res.json()).toEqual({ userId: 3, householdId: 1, role: 'user', timezone: null });
   });
 
   it('rejects with 401 (not 500) when the verified email has no matching users row', async () => {
@@ -102,7 +102,7 @@ describe('householdScope', () => {
   describe('multi-household membership', () => {
     it('resolves to the household named by X-Household-Id when the user belongs to more than one', async () => {
       await seedHouseholdsAndUsers();
-      await seedAdditionalMembership(1, 2, 'member');
+      await seedAdditionalMembership(1, 2, 'user');
 
       const res = await appWithStubEmail('admin-a@example.com').request(
         '/whoami',
@@ -111,12 +111,12 @@ describe('householdScope', () => {
       );
 
       expect(res.status).toBe(200);
-      expect(await res.json()).toMatchObject({ householdId: 2, role: 'member' });
+      expect(await res.json()).toMatchObject({ householdId: 2, role: 'user' });
     });
 
     it('never leaks the other household just because the same email/JWT is used', async () => {
       await seedHouseholdsAndUsers();
-      await seedAdditionalMembership(1, 2, 'member');
+      await seedAdditionalMembership(1, 2, 'user');
 
       const resHouseholdA = await appWithStubEmail('admin-a@example.com').request(
         '/whoami',
@@ -135,7 +135,7 @@ describe('householdScope', () => {
 
     it('resolves to the lowest-id membership (not a hard error) when multiple exist and no header is given', async () => {
       await seedHouseholdsAndUsers();
-      await seedAdditionalMembership(1, 2, 'member');
+      await seedAdditionalMembership(1, 2, 'user');
 
       const res = await appWithStubEmail('admin-a@example.com').request('/whoami', {}, env);
 
@@ -145,7 +145,7 @@ describe('householdScope', () => {
 
     it('resolving without a header is consistent every time — never alternates between memberships', async () => {
       await seedHouseholdsAndUsers();
-      await seedAdditionalMembership(1, 2, 'member');
+      await seedAdditionalMembership(1, 2, 'user');
 
       const first = await appWithStubEmail('admin-a@example.com').request('/whoami', {}, env);
       const second = await appWithStubEmail('admin-a@example.com').request('/whoami', {}, env);
@@ -166,13 +166,16 @@ describe('householdScope', () => {
       expect(res.status).toBe(403);
     });
 
-    it("requireAdmin reads the CURRENT household's per-membership role, not a stale one from another household", async () => {
+    it("reads the CURRENT household's per-membership role, not a stale one from another household", async () => {
       await seedHouseholdsAndUsers();
-      // admin-a is admin of household 1, but only a member of household 2.
-      await seedAdditionalMembership(1, 2, 'member');
+      // admin-a is admin of household 1, but only a 'user' role member of household 2.
+      await seedAdditionalMembership(1, 2, 'user');
 
+      // Adding a brand-new user is the one action still gated on role — proves
+      // the role read here is household 2's ('user'), not household 1's
+      // ('admin'), even though it's the same person via the same JWT.
       const res = await app.request(
-        '/api/rooms',
+        '/api/members',
         {
           method: 'POST',
           headers: {
@@ -180,7 +183,7 @@ describe('householdScope', () => {
             'X-Household-Id': '2',
             ...(await authHeader('admin-a@example.com')),
           },
-          body: JSON.stringify({ name: 'Garage' }),
+          body: JSON.stringify({ email: 'brand-new@example.com', role: 'user' }),
         },
         testEnv(),
       );
@@ -253,8 +256,8 @@ describe('cross-household access through the full app', () => {
   });
 });
 
-describe('requireAdmin on /api/members/*', () => {
-  it('returns 403 for a non-admin user', async () => {
+describe('member permissions on /api/members/*', () => {
+  it('GET is accessible to a non-admin member (open household privileges)', async () => {
     await seedHouseholdsAndUsers();
 
     const res = await app.request(
@@ -263,6 +266,40 @@ describe('requireAdmin on /api/members/*', () => {
       testEnv(),
     );
 
+    expect(res.status).toBe(200);
+  });
+
+  it('a non-admin member can add someone who already has an account elsewhere', async () => {
+    await seedHouseholdsAndUsers();
+
+    const res = await app.request(
+      '/api/members',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await authHeader('member-a@example.com')) },
+        body: JSON.stringify({ email: 'admin-b@example.com', role: 'user' }),
+      },
+      testEnv(),
+    );
+
+    expect(res.status).toBe(201);
+  });
+
+  it('a non-admin member cannot add a brand-new user (403)', async () => {
+    await seedHouseholdsAndUsers();
+
+    const res = await app.request(
+      '/api/members',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await authHeader('member-a@example.com')) },
+        body: JSON.stringify({ email: 'brand-new@example.com', role: 'user' }),
+      },
+      testEnv(),
+    );
+
     expect(res.status).toBe(403);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/ask a household admin/i);
   });
 });

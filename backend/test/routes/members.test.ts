@@ -67,7 +67,7 @@ beforeEach(async () => {
   ]);
   await seedHouseholdMember({ id: 1, householdId: 1, email: 'admin-a@example.com', role: 'admin' });
   await seedHouseholdMember({ id: 2, householdId: 2, email: 'admin-b@example.com', role: 'admin' });
-  await seedHouseholdMember({ id: 3, householdId: 1, email: 'member-a@example.com', role: 'member' });
+  await seedHouseholdMember({ id: 3, householdId: 1, email: 'member-a@example.com', role: 'user' });
 });
 
 afterEach(() => {
@@ -75,17 +75,30 @@ afterEach(() => {
 });
 
 describe('POST /api/members', () => {
-  it('returns 403 for a non-admin', async () => {
+  it('returns 403 for a non-admin adding a brand-new user (no account anywhere yet)', async () => {
     const res = await app.request(
       '/api/members',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(await authHeader('member-a@example.com')) },
-        body: JSON.stringify({ email: 'new@example.com', role: 'member' }),
+        body: JSON.stringify({ email: 'new@example.com', role: 'user' }),
       },
       testEnv(),
     );
     expect(res.status).toBe(403);
+  });
+
+  it('allows a non-admin to add an email that already has an account elsewhere', async () => {
+    const res = await app.request(
+      '/api/members',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await authHeader('member-a@example.com')) },
+        body: JSON.stringify({ email: 'admin-b@example.com', role: 'user' }),
+      },
+      testEnv(),
+    );
+    expect(res.status).toBe(201);
   });
 
   it('creates a member scoped to the admin own household, ignoring a different householdId in the body', async () => {
@@ -94,7 +107,7 @@ describe('POST /api/members', () => {
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(await authHeader('admin-a@example.com')) },
-        body: JSON.stringify({ email: 'new@example.com', role: 'member', householdId: 2 }),
+        body: JSON.stringify({ email: 'new@example.com', role: 'user', householdId: 2 }),
       },
       testEnv(),
     );
@@ -110,7 +123,7 @@ describe('POST /api/members', () => {
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(await authHeader('admin-a@example.com')) },
-        body: JSON.stringify({ email: '  New@Example.com  ', role: 'member' }),
+        body: JSON.stringify({ email: '  New@Example.com  ', role: 'user' }),
       },
       testEnv(),
     );
@@ -125,7 +138,7 @@ describe('POST /api/members', () => {
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(await authHeader('admin-a@example.com')) },
-        body: JSON.stringify({ email: 'Jane@Example.com', role: 'member' }),
+        body: JSON.stringify({ email: 'Jane@Example.com', role: 'user' }),
       },
       testEnv(),
     );
@@ -144,14 +157,14 @@ describe('POST /api/members', () => {
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(await authHeader('admin-a@example.com')) },
-        body: JSON.stringify({ email: 'admin-b@example.com', role: 'member' }),
+        body: JSON.stringify({ email: 'admin-b@example.com', role: 'user' }),
       },
       testEnv(),
     );
     expect(res.status).toBe(201);
     const body = (await res.json()) as { data: { householdId: number; role: string } };
     expect(body.data.householdId).toBe(1);
-    expect(body.data.role).toBe('member');
+    expect(body.data.role).toBe('user');
 
     const usersCount = await env.DB.prepare('SELECT COUNT(*) as count FROM users WHERE email = ?')
       .bind('admin-b@example.com')
@@ -172,7 +185,7 @@ describe('POST /api/members', () => {
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(await authHeader('admin-a@example.com')) },
-        body: JSON.stringify({ email: 'member-a@example.com', role: 'member' }),
+        body: JSON.stringify({ email: 'member-a@example.com', role: 'user' }),
       },
       testEnv(),
     );
@@ -186,7 +199,7 @@ describe('POST /api/members', () => {
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(await authHeader('admin-a@example.com')) },
-        body: JSON.stringify({ email: 'new@example.com', role: 'member' }),
+        body: JSON.stringify({ email: 'new@example.com', role: 'user' }),
       },
       { ...testEnv(), ...ACCESS_ALLOWLIST_ENV },
     );
@@ -212,7 +225,7 @@ describe('POST /api/members', () => {
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(await authHeader('admin-a@example.com')) },
-        body: JSON.stringify({ email: 'new@example.com', role: 'member' }),
+        body: JSON.stringify({ email: 'new@example.com', role: 'user' }),
       },
       { ...testEnv(), ...ACCESS_ALLOWLIST_ENV },
     );
@@ -236,7 +249,7 @@ describe('POST /api/members', () => {
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(await authHeader('admin-a@example.com')) },
-        body: JSON.stringify({ email: 'gracefail@example.com', role: 'member' }),
+        body: JSON.stringify({ email: 'gracefail@example.com', role: 'user' }),
       },
       { ...testEnv(), ...ACCESS_ALLOWLIST_ENV },
     );
@@ -293,7 +306,7 @@ describe('DELETE /api/members/:id', () => {
   it('removing a member from one household does not affect their membership in another', async () => {
     // Give admin-b (household 2 only, from beforeEach) a second membership in household 1.
     await env.DB.prepare('INSERT INTO household_members (user_id, household_id, role) VALUES (2, 1, ?)')
-      .bind('member')
+      .bind('user')
       .run();
 
     const res = await app.request(

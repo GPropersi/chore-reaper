@@ -7,7 +7,7 @@ type MembershipRow = {
   household_id: number;
   household_name: string;
   household_timezone: string;
-  role: 'admin' | 'member';
+  role: 'admin' | 'user';
 };
 
 me.get('/', async (c) => {

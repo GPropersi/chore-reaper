@@ -145,7 +145,7 @@ describe('mockFetch: /api/members', () => {
   it('POST creates a member and it appears in a subsequent GET', async () => {
     const createRes = await mockFetch('/api/members', {
       method: 'POST',
-      body: JSON.stringify({ email: 'preview@example.com', role: 'member' }),
+      body: JSON.stringify({ email: 'preview@example.com', role: 'user' }),
     });
     expect(createRes.status).toBe(201);
 

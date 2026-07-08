@@ -29,7 +29,7 @@ beforeEach(async () => {
     id: 2,
     householdId: HOUSEHOLD_A,
     email: 'member-a@example.com',
-    role: 'member',
+    role: 'user',
   });
 });
 
@@ -38,7 +38,7 @@ afterEach(() => {
 });
 
 describe('PATCH /api/households/:id', () => {
-  it('returns 403 for a non-admin', async () => {
+  it('allows a non-admin household member to update the timezone (open household privileges)', async () => {
     const res = await app.request(
       `/api/households/${HOUSEHOLD_A}`,
       {
@@ -48,7 +48,7 @@ describe('PATCH /api/households/:id', () => {
       },
       testEnv(),
     );
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(200);
   });
 
   it('returns 400 for an invalid timezone string', async () => {

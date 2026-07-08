@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
 import type { ApiResponse } from '../../../types/SharedTypes.js';
 import { getRoomsByHousehold, createRoom, renameRoom, deleteRoom } from '../rooms.js';
-import { requireAdmin } from '../middleware/require-admin.js';
 import type { AppEnv } from '../types.js';
 
 const rooms = new Hono<AppEnv>();
@@ -11,7 +10,7 @@ rooms.get('/', async (c) => {
   return c.json({ success: true, data } satisfies ApiResponse<typeof data>);
 });
 
-rooms.post('/', requireAdmin, async (c) => {
+rooms.post('/', async (c) => {
   const body = await c.req.json<Record<string, unknown>>();
   if (!body.name || typeof body.name !== 'string') {
     return c.json({ success: false, error: 'Missing required fields' } satisfies ApiResponse<never>, 400);
@@ -26,7 +25,7 @@ rooms.post('/', requireAdmin, async (c) => {
   return c.json({ success: true, data: result.room } satisfies ApiResponse<typeof result.room>, 201);
 });
 
-rooms.put('/:id', requireAdmin, async (c) => {
+rooms.put('/:id', async (c) => {
   const id = Number(c.req.param('id'));
   if (Number.isNaN(id)) {
     return c.json({ success: false, error: 'Invalid id' } satisfies ApiResponse<never>, 400);
@@ -48,7 +47,7 @@ rooms.put('/:id', requireAdmin, async (c) => {
   return c.json({ success: true, data: result.room } satisfies ApiResponse<typeof result.room>);
 });
 
-rooms.delete('/:id', requireAdmin, async (c) => {
+rooms.delete('/:id', async (c) => {
   const id = Number(c.req.param('id'));
   if (Number.isNaN(id)) {
     return c.json({ success: false, error: 'Invalid id' } satisfies ApiResponse<never>, 400);

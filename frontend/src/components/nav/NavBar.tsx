@@ -58,21 +58,19 @@ export default function NavBar({
             />
           ))}
         </div>
-        {isAdmin && (
-          <NavLink
-            to="/admin"
-            data-testid="admin-nav-link"
-            className={({ isActive }) =>
-              `px-4 sm:px-6 min-h-[44px] py-3 text-sm sm:text-base font-medium flex items-center ${
-                isActive
-                  ? 'border-b-2 border-indigo-500 text-indigo-400'
-                  : 'text-gray-400 hover:text-gray-200'
-              }`
-            }
-          >
-            Admin
-          </NavLink>
-        )}
+        {/* Open to every household member now, not admin-only — the label
+            just reflects whether this viewer also has admin privileges. */}
+        <NavLink
+          to="/admin"
+          data-testid="admin-nav-link"
+          className={({ isActive }) =>
+            `px-4 sm:px-6 min-h-[44px] py-3 text-sm sm:text-base font-medium flex items-center ${
+              isActive ? 'border-b-2 border-indigo-500 text-indigo-400' : 'text-gray-400 hover:text-gray-200'
+            }`
+          }
+        >
+          {isAdmin ? 'House / Admin' : 'House'}
+        </NavLink>
       </div>
     </div>
   );

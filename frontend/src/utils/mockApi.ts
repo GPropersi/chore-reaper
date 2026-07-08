@@ -25,7 +25,7 @@ type MockMember = {
   id: number;
   householdId: number;
   email: string;
-  role: 'admin' | 'member';
+  role: 'admin' | 'user';
   timezone: string | null;
 };
 
@@ -100,7 +100,7 @@ function seedChores(): ChoreWire[] {
 function seedMembers(): MockMember[] {
   return [
     { id: 1, householdId: 1, email: 'preview@example.com', role: 'admin', timezone: 'America/Chicago' },
-    { id: 2, householdId: 1, email: 'roommate@example.com', role: 'member', timezone: null },
+    { id: 2, householdId: 1, email: 'roommate@example.com', role: 'user', timezone: null },
   ];
 }
 

@@ -10,7 +10,7 @@ type Membership = {
   householdId: number;
   householdName: string;
   householdTimezone: string;
-  role: 'admin' | 'member';
+  role: 'admin' | 'user';
 };
 
 type Me = {
@@ -162,9 +162,6 @@ function AdminRoute({
 }) {
   const { rooms, onRoomsChange } = useOutletContext<LayoutContext>();
   if (!me || !currentMembership) return null;
-  if (currentMembership.role !== 'admin') {
-    return <div className="p-4 text-gray-400">Access denied.</div>;
-  }
   return (
     <AdminPanel
       rooms={rooms}

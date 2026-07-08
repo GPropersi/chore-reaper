@@ -24,7 +24,7 @@ beforeEach(async () => {
     role: 'admin',
     timezone: 'America/Los_Angeles',
   });
-  await seedHouseholdMember({ id: 2, householdId: 1, email: 'member@example.com', role: 'member' });
+  await seedHouseholdMember({ id: 2, householdId: 1, email: 'member@example.com', role: 'user' });
 });
 
 afterEach(() => {
@@ -68,7 +68,7 @@ describe('GET /api/me', () => {
     await env.DB.prepare('INSERT INTO households (id, name, timezone) VALUES (2, ?, ?)')
       .bind('Household B', 'Europe/London')
       .run();
-    await seedAdditionalMembership(1, 2, 'member');
+    await seedAdditionalMembership(1, 2, 'user');
 
     const token = await signTestJwt({ email: 'admin@example.com', aud: TEST_ACCESS_AUD });
     const res = await app.request(
@@ -84,6 +84,6 @@ describe('GET /api/me', () => {
     };
     expect(body.currentHouseholdId).toBe(2);
     expect(body.memberships.map((m) => m.householdId).sort()).toEqual([1, 2]);
-    expect(body.memberships.find((m) => m.householdId === 2)?.role).toBe('member');
+    expect(body.memberships.find((m) => m.householdId === 2)?.role).toBe('user');
   });
 });

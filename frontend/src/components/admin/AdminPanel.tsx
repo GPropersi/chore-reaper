@@ -11,7 +11,7 @@ export type Member = {
   id: number;
   householdId: number;
   email: string;
-  role: 'admin' | 'member';
+  role: 'admin' | 'user';
   timezone: string | null;
 };
 
@@ -99,11 +99,18 @@ export default function AdminPanel({
         {members.map((member) => (
           <li key={member.id} className="flex justify-between items-center bg-gray-800 rounded-lg px-4 py-2">
             <div>
-              <p className="text-white text-sm">{member.email}</p>
-              <p className="text-gray-400 text-xs">
-                {member.role}
-                {member.timezone ? ` · ${member.timezone}` : ''}
-              </p>
+              <div className="flex items-center gap-2">
+                <p className="text-white text-sm">{member.email}</p>
+                {member.role === 'admin' && (
+                  <span
+                    data-testid="admin-badge"
+                    className="text-[10px] font-semibold uppercase tracking-wide text-indigo-400 bg-indigo-900/50 px-2 py-0.5 rounded-full"
+                  >
+                    Admin
+                  </span>
+                )}
+              </div>
+              {member.timezone && <p className="text-gray-400 text-xs">{member.timezone}</p>}
             </div>
             <button
               type="button"

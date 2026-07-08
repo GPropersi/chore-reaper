@@ -41,7 +41,7 @@ beforeEach(async () => {
     id: 2,
     householdId: HOUSEHOLD_A,
     email: 'member-a@example.com',
-    role: 'member',
+    role: 'user',
   });
 });
 
@@ -63,7 +63,7 @@ describe('GET /api/rooms', () => {
 });
 
 describe('POST /api/rooms', () => {
-  it('returns 403 for a non-admin', async () => {
+  it('allows a non-admin household member to create a room (open household privileges)', async () => {
     const res = await app.request(
       '/api/rooms',
       {
@@ -73,7 +73,7 @@ describe('POST /api/rooms', () => {
       },
       testEnv(),
     );
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(201);
   });
 
   it('creates a room scoped to the admin own household', async () => {

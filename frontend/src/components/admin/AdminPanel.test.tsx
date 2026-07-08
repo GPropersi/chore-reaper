@@ -11,7 +11,7 @@ function jsonResponse(body: unknown) {
 
 const initialMembers = [
   { id: 1, householdId: 1, email: 'admin@example.com', role: 'admin', timezone: 'America/Chicago' },
-  { id: 2, householdId: 1, email: 'member@example.com', role: 'member', timezone: null },
+  { id: 2, householdId: 1, email: 'member@example.com', role: 'user', timezone: null },
 ];
 
 const noRoomsProps = {

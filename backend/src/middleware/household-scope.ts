@@ -8,7 +8,7 @@ type UserRow = {
 
 type MembershipRow = {
   household_id: number;
-  role: 'admin' | 'member';
+  role: 'admin' | 'user';
 };
 
 export const householdScope = createMiddleware<AppEnv>(async (c, next) => {

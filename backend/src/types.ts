@@ -2,7 +2,7 @@ export type AppVariables = {
   verifiedEmail: string;
   userId: number;
   householdId: number;
-  role: 'admin' | 'member';
+  role: 'admin' | 'user';
   timezone: string | null;
 };
 
