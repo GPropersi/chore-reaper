@@ -4,37 +4,37 @@ import type { AppEnv } from '../types.js';
 const me = new Hono<AppEnv>();
 
 type MembershipRow = {
-  organization_id: number;
-  organization_name: string;
-  organization_timezone: string;
+  household_id: number;
+  household_name: string;
+  household_timezone: string;
   role: 'admin' | 'member';
 };
 
 me.get('/', async (c) => {
   const memberships = await c.env.DB.prepare(
-    `SELECT om.organization_id AS organization_id, o.name AS organization_name,
-            o.timezone AS organization_timezone, om.role AS role
-     FROM org_members om
-     JOIN organizations o ON o.id = om.organization_id
-     WHERE om.user_id = ?
-     ORDER BY o.name`,
+    `SELECT hm.household_id AS household_id, h.name AS household_name,
+            h.timezone AS household_timezone, hm.role AS role
+     FROM household_members hm
+     JOIN households h ON h.id = hm.household_id
+     WHERE hm.user_id = ?
+     ORDER BY h.name`,
   )
     .bind(c.var.userId)
     .all<MembershipRow>();
 
-  const current = memberships.results.find((m) => m.organization_id === c.var.organizationId);
+  const current = memberships.results.find((m) => m.household_id === c.var.householdId);
 
   return c.json({
     id: c.var.userId,
     email: c.var.verifiedEmail,
-    timezone: c.var.timezone ?? current?.organization_timezone ?? null,
+    timezone: c.var.timezone ?? current?.household_timezone ?? null,
     memberships: memberships.results.map((m) => ({
-      organizationId: m.organization_id,
-      organizationName: m.organization_name,
-      organizationTimezone: m.organization_timezone,
+      householdId: m.household_id,
+      householdName: m.household_name,
+      householdTimezone: m.household_timezone,
       role: m.role,
     })),
-    currentOrganizationId: c.var.organizationId,
+    currentHouseholdId: c.var.householdId,
   });
 });
 

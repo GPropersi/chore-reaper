@@ -4,12 +4,12 @@ import ConfirmDialog from '../common/ConfirmDialog';
 import StatusBanner from '../common/StatusBanner';
 import AddMemberModal, { type AddMemberInput } from './AddMemberModal';
 import RoomsSection from './RoomsSection';
-import OrganizationSection from './OrganizationSection';
+import HouseholdSection from './HouseholdSection';
 import { apiFetch } from '../../utils/api';
 
 export type Member = {
   id: number;
-  organizationId: number;
+  householdId: number;
   email: string;
   role: 'admin' | 'member';
   timezone: string | null;
@@ -20,17 +20,17 @@ type ApiResponse<T> = { success: boolean; data?: T; error?: string; warning?: st
 type AdminPanelProps = {
   rooms: Room[];
   onRoomsChange: (rooms: Room[]) => void;
-  organizationId: number;
-  organizationTimezone: string;
-  onOrgTimezoneChange: (timezone: string) => void;
+  householdId: number;
+  householdTimezone: string;
+  onHouseholdTimezoneChange: (timezone: string) => void;
 };
 
 export default function AdminPanel({
   rooms,
   onRoomsChange,
-  organizationId,
-  organizationTimezone,
-  onOrgTimezoneChange,
+  householdId,
+  householdTimezone,
+  onHouseholdTimezoneChange,
 }: AdminPanelProps) {
   const [members, setMembers] = useState<Member[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -55,7 +55,7 @@ export default function AdminPanel({
       setWarning(body.warning ?? null);
       setIsAddOpen(false);
     } else {
-      // Keep the modal open on failure (e.g. already a member of this org)
+      // Keep the modal open on failure (e.g. already a member of this household)
       // so the admin can see what went wrong and correct the email/role.
       setWarning(body.error ?? 'Could not add member');
     }
@@ -76,10 +76,10 @@ export default function AdminPanel({
     <div className="p-4">
       {warning && <StatusBanner tone="warning" message={warning} />}
 
-      <OrganizationSection
-        organizationId={organizationId}
-        organizationTimezone={organizationTimezone}
-        onTimezoneChange={onOrgTimezoneChange}
+      <HouseholdSection
+        householdId={householdId}
+        householdTimezone={householdTimezone}
+        onTimezoneChange={onHouseholdTimezoneChange}
       />
 
       <RoomsSection rooms={rooms} onRoomsChange={onRoomsChange} />

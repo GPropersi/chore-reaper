@@ -29,7 +29,7 @@ export default function TimezoneSelect({
         required={required}
         className="bg-gray-700 text-white rounded px-3 py-2 text-sm"
       >
-        {allowUnset && <option value="">Same as organization</option>}
+        {allowUnset && <option value="">Same as household</option>}
         {IANA_TIMEZONES.map((tz) => (
           <option key={tz} value={tz}>
             {tz}

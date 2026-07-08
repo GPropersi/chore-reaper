@@ -3,10 +3,10 @@ import { env } from 'cloudflare:workers';
 import app from '../../src/app.js';
 import { signTestJwt } from '../helpers/sign-test-jwt.js';
 import { stubAccessJwks, testEnv, TEST_ACCESS_AUD } from '../helpers/access-test-env.js';
-import { seedOrgMember } from '../helpers/seed.js';
+import { seedHouseholdMember } from '../helpers/seed.js';
 
-const ORG_A = 1;
-const ORG_B = 2;
+const HOUSEHOLD_A = 1;
+const HOUSEHOLD_B = 2;
 
 async function authHeader(email: string) {
   const token = await signTestJwt({ email, aud: TEST_ACCESS_AUD });
@@ -17,25 +17,30 @@ beforeEach(async () => {
   stubAccessJwks();
   await env.DB.exec('DELETE FROM chores');
   await env.DB.exec('DELETE FROM rooms');
-  await env.DB.exec('DELETE FROM org_members');
+  await env.DB.exec('DELETE FROM household_members');
   await env.DB.exec('DELETE FROM users');
-  await env.DB.exec('DELETE FROM organizations');
+  await env.DB.exec('DELETE FROM households');
   await env.DB.batch([
-    env.DB.prepare('INSERT INTO organizations (id, name, timezone) VALUES (1, ?, ?)').bind('Org A', 'UTC'),
-    env.DB.prepare('INSERT INTO organizations (id, name, timezone) VALUES (2, ?, ?)').bind('Org B', 'UTC'),
+    env.DB.prepare('INSERT INTO households (id, name, timezone) VALUES (1, ?, ?)').bind('Household A', 'UTC'),
+    env.DB.prepare('INSERT INTO households (id, name, timezone) VALUES (2, ?, ?)').bind('Household B', 'UTC'),
   ]);
-  await seedOrgMember({ id: 1, organizationId: ORG_A, email: 'admin-a@example.com', role: 'admin' });
-  await seedOrgMember({ id: 2, organizationId: ORG_A, email: 'member-a@example.com', role: 'member' });
+  await seedHouseholdMember({ id: 1, householdId: HOUSEHOLD_A, email: 'admin-a@example.com', role: 'admin' });
+  await seedHouseholdMember({
+    id: 2,
+    householdId: HOUSEHOLD_A,
+    email: 'member-a@example.com',
+    role: 'member',
+  });
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('PATCH /api/organizations/:id', () => {
+describe('PATCH /api/households/:id', () => {
   it('returns 403 for a non-admin', async () => {
     const res = await app.request(
-      `/api/organizations/${ORG_A}`,
+      `/api/households/${HOUSEHOLD_A}`,
       {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', ...(await authHeader('member-a@example.com')) },
@@ -48,7 +53,7 @@ describe('PATCH /api/organizations/:id', () => {
 
   it('returns 400 for an invalid timezone string', async () => {
     const res = await app.request(
-      `/api/organizations/${ORG_A}`,
+      `/api/households/${HOUSEHOLD_A}`,
       {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', ...(await authHeader('admin-a@example.com')) },
@@ -59,9 +64,9 @@ describe('PATCH /api/organizations/:id', () => {
     expect(res.status).toBe(400);
   });
 
-  it("returns 400 when the id in the path isn't the admin's own org", async () => {
+  it("returns 400 when the id in the path isn't the admin's own household", async () => {
     const res = await app.request(
-      `/api/organizations/${ORG_B}`,
+      `/api/households/${HOUSEHOLD_B}`,
       {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', ...(await authHeader('admin-a@example.com')) },
@@ -71,15 +76,15 @@ describe('PATCH /api/organizations/:id', () => {
     );
     expect(res.status).toBe(400);
 
-    const orgB = await env.DB.prepare('SELECT timezone FROM organizations WHERE id = ?')
-      .bind(ORG_B)
+    const householdB = await env.DB.prepare('SELECT timezone FROM households WHERE id = ?')
+      .bind(HOUSEHOLD_B)
       .first<{ timezone: string }>();
-    expect(orgB?.timezone).toBe('UTC');
+    expect(householdB?.timezone).toBe('UTC');
   });
 
   it('updates the timezone for a valid admin request', async () => {
     const res = await app.request(
-      `/api/organizations/${ORG_A}`,
+      `/api/households/${HOUSEHOLD_A}`,
       {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', ...(await authHeader('admin-a@example.com')) },
@@ -91,9 +96,9 @@ describe('PATCH /api/organizations/:id', () => {
     const body = (await res.json()) as { data: { timezone: string } };
     expect(body.data.timezone).toBe('America/Chicago');
 
-    const orgA = await env.DB.prepare('SELECT timezone FROM organizations WHERE id = ?')
-      .bind(ORG_A)
+    const householdA = await env.DB.prepare('SELECT timezone FROM households WHERE id = ?')
+      .bind(HOUSEHOLD_A)
       .first<{ timezone: string }>();
-    expect(orgA?.timezone).toBe('America/Chicago');
+    expect(householdA?.timezone).toBe('America/Chicago');
   });
 });

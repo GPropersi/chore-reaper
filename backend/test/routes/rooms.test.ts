@@ -3,10 +3,10 @@ import { env } from 'cloudflare:workers';
 import app from '../../src/app.js';
 import { signTestJwt } from '../helpers/sign-test-jwt.js';
 import { stubAccessJwks, testEnv, TEST_ACCESS_AUD } from '../helpers/access-test-env.js';
-import { seedOrgMember } from '../helpers/seed.js';
+import { seedHouseholdMember } from '../helpers/seed.js';
 
-const ORG_A = 1;
-const ORG_B = 2;
+const HOUSEHOLD_A = 1;
+const HOUSEHOLD_B = 2;
 const ROOM_A = 1;
 const ROOM_B = 2;
 
@@ -19,25 +19,30 @@ beforeEach(async () => {
   stubAccessJwks();
   await env.DB.exec('DELETE FROM chores');
   await env.DB.exec('DELETE FROM rooms');
-  await env.DB.exec('DELETE FROM org_members');
+  await env.DB.exec('DELETE FROM household_members');
   await env.DB.exec('DELETE FROM users');
-  await env.DB.exec('DELETE FROM organizations');
+  await env.DB.exec('DELETE FROM households');
   await env.DB.batch([
-    env.DB.prepare('INSERT INTO organizations (id, name, timezone) VALUES (1, ?, ?)').bind('Org A', 'UTC'),
-    env.DB.prepare('INSERT INTO organizations (id, name, timezone) VALUES (2, ?, ?)').bind('Org B', 'UTC'),
-    env.DB.prepare('INSERT INTO rooms (id, organization_id, name) VALUES (?, ?, ?)').bind(
+    env.DB.prepare('INSERT INTO households (id, name, timezone) VALUES (1, ?, ?)').bind('Household A', 'UTC'),
+    env.DB.prepare('INSERT INTO households (id, name, timezone) VALUES (2, ?, ?)').bind('Household B', 'UTC'),
+    env.DB.prepare('INSERT INTO rooms (id, household_id, name) VALUES (?, ?, ?)').bind(
       ROOM_A,
-      ORG_A,
+      HOUSEHOLD_A,
       'Kitchen',
     ),
-    env.DB.prepare('INSERT INTO rooms (id, organization_id, name) VALUES (?, ?, ?)').bind(
+    env.DB.prepare('INSERT INTO rooms (id, household_id, name) VALUES (?, ?, ?)').bind(
       ROOM_B,
-      ORG_B,
+      HOUSEHOLD_B,
       'Kitchen',
     ),
   ]);
-  await seedOrgMember({ id: 1, organizationId: ORG_A, email: 'admin-a@example.com', role: 'admin' });
-  await seedOrgMember({ id: 2, organizationId: ORG_A, email: 'member-a@example.com', role: 'member' });
+  await seedHouseholdMember({ id: 1, householdId: HOUSEHOLD_A, email: 'admin-a@example.com', role: 'admin' });
+  await seedHouseholdMember({
+    id: 2,
+    householdId: HOUSEHOLD_A,
+    email: 'member-a@example.com',
+    role: 'member',
+  });
 });
 
 afterEach(() => {
@@ -45,7 +50,7 @@ afterEach(() => {
 });
 
 describe('GET /api/rooms', () => {
-  it('is accessible to a non-admin member and returns only same-org rooms', async () => {
+  it('is accessible to a non-admin member and returns only same-household rooms', async () => {
     const res = await app.request(
       '/api/rooms',
       { headers: await authHeader('member-a@example.com') },
@@ -71,7 +76,7 @@ describe('POST /api/rooms', () => {
     expect(res.status).toBe(403);
   });
 
-  it('creates a room scoped to the admin own org', async () => {
+  it('creates a room scoped to the admin own household', async () => {
     const res = await app.request(
       '/api/rooms',
       {
@@ -82,12 +87,12 @@ describe('POST /api/rooms', () => {
       testEnv(),
     );
     expect(res.status).toBe(201);
-    const body = (await res.json()) as { data: { organizationId: number; name: string } };
-    expect(body.data.organizationId).toBe(ORG_A);
+    const body = (await res.json()) as { data: { householdId: number; name: string } };
+    expect(body.data.householdId).toBe(HOUSEHOLD_A);
     expect(body.data.name).toBe('Garage');
   });
 
-  it('returns 409 for a duplicate name in the same org', async () => {
+  it('returns 409 for a duplicate name in the same household', async () => {
     const res = await app.request(
       '/api/rooms',
       {
@@ -102,7 +107,7 @@ describe('POST /api/rooms', () => {
 });
 
 describe('DELETE /api/rooms/:id', () => {
-  it('cannot target a room in a different org (404)', async () => {
+  it('cannot target a room in a different household (404)', async () => {
     const res = await app.request(
       `/api/rooms/${ROOM_B}`,
       { method: 'DELETE', headers: await authHeader('admin-a@example.com') },
@@ -136,7 +141,7 @@ describe('DELETE /api/rooms/:id', () => {
     expect(res.status).toBe(409);
   });
 
-  it('deletes an empty same-org room', async () => {
+  it('deletes an empty same-household room', async () => {
     const res = await app.request(
       `/api/rooms/${ROOM_A}`,
       { method: 'DELETE', headers: await authHeader('admin-a@example.com') },

@@ -21,7 +21,7 @@ test('admin can add a member and see them appear in the list', async ({ page }) 
   await expect(page.getByRole('heading', { name: 'Members' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Add Member' }).click();
-  // Scoped to the modal: the Admin page now also has an Organization section
+  // Scoped to the modal: the Admin page now also has a Household section
   // with its own "Save" button, so an unscoped locator is ambiguous.
   const modal = page.getByTestId('add-member-modal-backdrop');
   await modal.getByLabel('Email').fill('new-e2e-member@example.com');

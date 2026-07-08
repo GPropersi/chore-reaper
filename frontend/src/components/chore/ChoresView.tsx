@@ -22,7 +22,7 @@ function wireToChore(wire: ChoreWire): ChoreWithVersion {
 }
 
 type ChoresViewProps = {
-  organizationTimezone: string;
+  householdTimezone: string;
   timezone: string;
   outbox?: Outbox;
   selectedRoom?: string;
@@ -82,13 +82,13 @@ async function mutate<T>({
 }
 
 export default function ChoresView({
-  organizationTimezone,
+  householdTimezone,
   timezone,
   outbox: outboxProp,
   selectedRoom = 'all',
   rooms,
 }: ChoresViewProps) {
-  const today = useMidnightClock(organizationTimezone);
+  const today = useMidnightClock(householdTimezone);
   const [chores, setChores] = useState<ChoreWithVersion[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);

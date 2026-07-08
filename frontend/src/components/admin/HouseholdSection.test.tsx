@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import OrganizationSection from './OrganizationSection';
+import HouseholdSection from './HouseholdSection';
 
 function jsonResponse(body: unknown, status = 200) {
   return Promise.resolve(
@@ -14,27 +14,21 @@ afterEach(() => {
   cleanup();
 });
 
-describe('OrganizationSection', () => {
-  it('submits the selected timezone to PATCH /api/organizations/:id and reports it back on success', async () => {
+describe('HouseholdSection', () => {
+  it('submits the selected timezone to PATCH /api/households/:id and reports it back on success', async () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input.toString();
-      if (url === '/api/organizations/1' && init?.method === 'PATCH') {
+      if (url === '/api/households/1' && init?.method === 'PATCH') {
         const body = JSON.parse(init.body as string);
-        return jsonResponse({ success: true, data: { id: 1, name: 'Org', timezone: body.timezone } });
+        return jsonResponse({ success: true, data: { id: 1, name: 'Household', timezone: body.timezone } });
       }
       throw new Error(`Unhandled fetch: ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
     const onTimezoneChange = vi.fn();
 
-    render(
-      <OrganizationSection
-        organizationId={1}
-        organizationTimezone="UTC"
-        onTimezoneChange={onTimezoneChange}
-      />,
-    );
+    render(<HouseholdSection householdId={1} householdTimezone="UTC" onTimezoneChange={onTimezoneChange} />);
 
     await user.selectOptions(screen.getByLabelText('Timezone'), 'America/Chicago');
     await user.click(screen.getByRole('button', { name: 'Save' }));
@@ -53,7 +47,7 @@ describe('OrganizationSection', () => {
       vi.fn(() => jsonResponse({ success: false, error: 'Invalid timezone' }, 400)),
     );
 
-    render(<OrganizationSection organizationId={1} organizationTimezone="UTC" onTimezoneChange={vi.fn()} />);
+    render(<HouseholdSection householdId={1} householdTimezone="UTC" onTimezoneChange={vi.fn()} />);
 
     await user.click(screen.getByRole('button', { name: 'Save' }));
 

@@ -3,8 +3,8 @@ import type { Room } from '@customTypes/SharedTypes';
 import RoomTab from './RoomTab';
 
 type Membership = {
-  organizationId: number;
-  organizationName: string;
+  householdId: number;
+  householdName: string;
 };
 
 type NavBarProps = {
@@ -13,8 +13,8 @@ type NavBarProps = {
   onSelect: (room: string) => void;
   isAdmin?: boolean;
   memberships?: Membership[];
-  currentOrganizationId?: number;
-  onSwitchOrg?: (organizationId: number) => void;
+  currentHouseholdId?: number;
+  onSwitchHousehold?: (householdId: number) => void;
 };
 
 export default function NavBar({
@@ -23,26 +23,26 @@ export default function NavBar({
   onSelect,
   isAdmin = false,
   memberships = [],
-  currentOrganizationId,
-  onSwitchOrg,
+  currentHouseholdId,
+  onSwitchHousehold,
 }: NavBarProps) {
   return (
     <div id="NavBar" className="border-b border-gray-700 flex-shrink-0">
       <div className="container mx-auto flex items-center justify-between space-x-1 overflow-x-auto scrollbar-none">
         <div className="flex items-center space-x-1">
           {/* Only rendered for the (still uncommon) case of belonging to more
-              than one org — no UI change at all for the common single-org
-              case. */}
-          {memberships.length > 1 && onSwitchOrg && (
+              than one household — no UI change at all for the common
+              single-household case. */}
+          {memberships.length > 1 && onSwitchHousehold && (
             <select
-              aria-label="Organization"
-              value={currentOrganizationId}
-              onChange={(e) => onSwitchOrg(Number(e.target.value))}
+              aria-label="Household"
+              value={currentHouseholdId}
+              onChange={(e) => onSwitchHousehold(Number(e.target.value))}
               className="bg-gray-800 text-gray-200 text-sm rounded px-2 py-1 mr-2"
             >
               {memberships.map((m) => (
-                <option key={m.organizationId} value={m.organizationId}>
-                  {m.organizationName}
+                <option key={m.householdId} value={m.householdId}>
+                  {m.householdName}
                 </option>
               ))}
             </select>

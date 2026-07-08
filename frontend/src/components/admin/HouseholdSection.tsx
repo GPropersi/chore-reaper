@@ -5,18 +5,18 @@ import { apiFetch } from '../../utils/api';
 
 type ApiResponse<T> = { success: boolean; data?: T; error?: string };
 
-type OrganizationSectionProps = {
-  organizationId: number;
-  organizationTimezone: string;
+type HouseholdSectionProps = {
+  householdId: number;
+  householdTimezone: string;
   onTimezoneChange: (timezone: string) => void;
 };
 
-export default function OrganizationSection({
-  organizationId,
-  organizationTimezone,
+export default function HouseholdSection({
+  householdId,
+  householdTimezone,
   onTimezoneChange,
-}: OrganizationSectionProps) {
-  const [timezone, setTimezone] = useState(organizationTimezone);
+}: HouseholdSectionProps) {
+  const [timezone, setTimezone] = useState(householdTimezone);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
@@ -24,7 +24,7 @@ export default function OrganizationSection({
     e.preventDefault();
     setError(null);
     setSaved(false);
-    const res = await apiFetch(`/api/organizations/${organizationId}`, {
+    const res = await apiFetch(`/api/households/${householdId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ timezone }),
@@ -42,12 +42,12 @@ export default function OrganizationSection({
     <div className="mb-8">
       {error && <StatusBanner tone="warning" message={error} />}
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-white text-lg font-semibold">Organization</h2>
+        <h2 className="text-white text-lg font-semibold">Household</h2>
       </div>
       <form onSubmit={handleSubmit} className="flex items-end gap-2">
         <div className="flex-1">
           <TimezoneSelect
-            id="org-timezone"
+            id="household-timezone"
             label="Timezone"
             value={timezone}
             onChange={setTimezone}

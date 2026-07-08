@@ -3,7 +3,7 @@ import { env } from 'cloudflare:workers';
 import app from '../../src/app.js';
 import { signTestJwt } from '../helpers/sign-test-jwt.js';
 import { stubAccessJwks, testEnv, TEST_ACCESS_AUD, TEST_JWKS_URL } from '../helpers/access-test-env.js';
-import { seedOrgMember } from '../helpers/seed.js';
+import { seedHouseholdMember } from '../helpers/seed.js';
 import primaryJwks from '../fixtures/test-jwks.json' with { type: 'json' };
 
 const ACCESS_ALLOWLIST_ENV = {
@@ -58,16 +58,16 @@ async function authHeader(email: string) {
 beforeEach(async () => {
   stubAccessJwks();
   await env.DB.exec('DELETE FROM chores');
-  await env.DB.exec('DELETE FROM org_members');
+  await env.DB.exec('DELETE FROM household_members');
   await env.DB.exec('DELETE FROM users');
-  await env.DB.exec('DELETE FROM organizations');
+  await env.DB.exec('DELETE FROM households');
   await env.DB.batch([
-    env.DB.prepare('INSERT INTO organizations (id, name, timezone) VALUES (1, ?, ?)').bind('Org A', 'UTC'),
-    env.DB.prepare('INSERT INTO organizations (id, name, timezone) VALUES (2, ?, ?)').bind('Org B', 'UTC'),
+    env.DB.prepare('INSERT INTO households (id, name, timezone) VALUES (1, ?, ?)').bind('Household A', 'UTC'),
+    env.DB.prepare('INSERT INTO households (id, name, timezone) VALUES (2, ?, ?)').bind('Household B', 'UTC'),
   ]);
-  await seedOrgMember({ id: 1, organizationId: 1, email: 'admin-a@example.com', role: 'admin' });
-  await seedOrgMember({ id: 2, organizationId: 2, email: 'admin-b@example.com', role: 'admin' });
-  await seedOrgMember({ id: 3, organizationId: 1, email: 'member-a@example.com', role: 'member' });
+  await seedHouseholdMember({ id: 1, householdId: 1, email: 'admin-a@example.com', role: 'admin' });
+  await seedHouseholdMember({ id: 2, householdId: 2, email: 'admin-b@example.com', role: 'admin' });
+  await seedHouseholdMember({ id: 3, householdId: 1, email: 'member-a@example.com', role: 'member' });
 });
 
 afterEach(() => {
@@ -88,19 +88,19 @@ describe('POST /api/members', () => {
     expect(res.status).toBe(403);
   });
 
-  it('creates a member scoped to the admin own org, ignoring a different organizationId in the body', async () => {
+  it('creates a member scoped to the admin own household, ignoring a different householdId in the body', async () => {
     const res = await app.request(
       '/api/members',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(await authHeader('admin-a@example.com')) },
-        body: JSON.stringify({ email: 'new@example.com', role: 'member', organizationId: 2 }),
+        body: JSON.stringify({ email: 'new@example.com', role: 'member', householdId: 2 }),
       },
       testEnv(),
     );
     expect(res.status).toBe(201);
-    const body = (await res.json()) as { data: { organizationId: number; email: string } };
-    expect(body.data.organizationId).toBe(1);
+    const body = (await res.json()) as { data: { householdId: number; email: string } };
+    expect(body.data.householdId).toBe(1);
     expect(body.data.email).toBe('new@example.com');
   });
 
@@ -136,9 +136,9 @@ describe('POST /api/members', () => {
     expect(meRes.status).toBe(200);
   });
 
-  it('adding an email that already belongs to another org creates only a new membership, not a duplicate account', async () => {
-    // admin-b@example.com already has a users row (org 2) from beforeEach —
-    // adding them to org 1 must not touch/duplicate that row.
+  it('adding an email that already belongs to another household creates only a new membership, not a duplicate account', async () => {
+    // admin-b@example.com already has a users row (household 2) from beforeEach —
+    // adding them to household 1 must not touch/duplicate that row.
     const res = await app.request(
       '/api/members',
       {
@@ -149,8 +149,8 @@ describe('POST /api/members', () => {
       testEnv(),
     );
     expect(res.status).toBe(201);
-    const body = (await res.json()) as { data: { organizationId: number; role: string } };
-    expect(body.data.organizationId).toBe(1);
+    const body = (await res.json()) as { data: { householdId: number; role: string } };
+    expect(body.data.householdId).toBe(1);
     expect(body.data.role).toBe('member');
 
     const usersCount = await env.DB.prepare('SELECT COUNT(*) as count FROM users WHERE email = ?')
@@ -159,14 +159,14 @@ describe('POST /api/members', () => {
     expect(usersCount?.count).toBe(1);
 
     const memberships = await env.DB.prepare(
-      'SELECT organization_id FROM org_members WHERE user_id = 2',
+      'SELECT household_id FROM household_members WHERE user_id = 2',
     ).all<{
-      organization_id: number;
+      household_id: number;
     }>();
-    expect(memberships.results.map((m) => m.organization_id).sort()).toEqual([1, 2]);
+    expect(memberships.results.map((m) => m.household_id).sort()).toEqual([1, 2]);
   });
 
-  it('returns 409 when the email is already a member of the current org', async () => {
+  it('returns 409 when the email is already a member of the current household', async () => {
     const res = await app.request(
       '/api/members',
       {
@@ -258,7 +258,7 @@ describe('POST /api/members', () => {
 });
 
 describe('GET /api/members', () => {
-  it('lists only same-org members for an admin', async () => {
+  it('lists only same-household members for an admin', async () => {
     const res = await app.request(
       '/api/members',
       { headers: await authHeader('admin-a@example.com') },
@@ -272,7 +272,7 @@ describe('GET /api/members', () => {
 });
 
 describe('DELETE /api/members/:id', () => {
-  it('cannot target a member in a different org (404)', async () => {
+  it('cannot target a member in a different household (404)', async () => {
     const res = await app.request(
       '/api/members/2',
       { method: 'DELETE', headers: await authHeader('admin-a@example.com') },
@@ -281,7 +281,7 @@ describe('DELETE /api/members/:id', () => {
     expect(res.status).toBe(404);
   });
 
-  it('deletes a same-org member', async () => {
+  it('deletes a same-household member', async () => {
     const res = await app.request(
       '/api/members/3',
       { method: 'DELETE', headers: await authHeader('admin-a@example.com') },
@@ -290,9 +290,9 @@ describe('DELETE /api/members/:id', () => {
     expect(res.status).toBe(200);
   });
 
-  it('removing a member from one org does not affect their membership in another', async () => {
-    // Give admin-b (org 2 only, from beforeEach) a second membership in org 1.
-    await env.DB.prepare('INSERT INTO org_members (user_id, organization_id, role) VALUES (2, 1, ?)')
+  it('removing a member from one household does not affect their membership in another', async () => {
+    // Give admin-b (household 2 only, from beforeEach) a second membership in household 1.
+    await env.DB.prepare('INSERT INTO household_members (user_id, household_id, role) VALUES (2, 1, ?)')
       .bind('member')
       .run();
 
@@ -304,7 +304,7 @@ describe('DELETE /api/members/:id', () => {
     expect(res.status).toBe(200);
 
     const remainingMembership = await env.DB.prepare(
-      'SELECT id FROM org_members WHERE user_id = 2 AND organization_id = 2',
+      'SELECT id FROM household_members WHERE user_id = 2 AND household_id = 2',
     ).first<{ id: number }>();
     expect(remainingMembership).toBeTruthy();
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { apiFetch, setCurrentOrgId, getCurrentOrgId } from './api';
+import { apiFetch, setCurrentHouseholdId, getCurrentHouseholdId } from './api';
 import { resetMockData } from './mockApi';
 
 function setHostname(hostname: string) {
@@ -16,7 +16,7 @@ afterEach(() => {
   setHostname(ORIGINAL_HOSTNAME);
   vi.unstubAllGlobals();
   resetMockData();
-  setCurrentOrgId(null);
+  setCurrentHouseholdId(null);
   localStorage.clear();
 });
 
@@ -71,9 +71,9 @@ describe('apiFetch', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('attaches an X-Org-Id header once a current org is set', async () => {
+  it('attaches an X-Household-Id header once a current household is set', async () => {
     setHostname('localhost');
-    setCurrentOrgId(2);
+    setCurrentHouseholdId(2);
     const fetchMock = vi.fn((_input: RequestInfo | URL, _init?: RequestInit) =>
       Promise.resolve(new Response('{}')),
     );
@@ -83,10 +83,10 @@ describe('apiFetch', () => {
 
     const [, init] = fetchMock.mock.calls[0];
     expect(init?.headers).toBeInstanceOf(Headers);
-    expect((init?.headers as Headers).get('X-Org-Id')).toBe('2');
+    expect((init?.headers as Headers).get('X-Household-Id')).toBe('2');
   });
 
-  it('sends no X-Org-Id header when no org has been selected', async () => {
+  it('sends no X-Household-Id header when no household has been selected', async () => {
     setHostname('localhost');
     const fetchMock = vi.fn((_input: RequestInfo | URL, _init?: RequestInit) =>
       Promise.resolve(new Response('{}')),
@@ -96,21 +96,21 @@ describe('apiFetch', () => {
     await apiFetch('/api/chores');
 
     const [, init] = fetchMock.mock.calls[0];
-    expect((init?.headers as Headers).get('X-Org-Id')).toBeNull();
+    expect((init?.headers as Headers).get('X-Household-Id')).toBeNull();
   });
 });
 
-describe('setCurrentOrgId / getCurrentOrgId', () => {
-  it('persists the chosen org id across calls via localStorage', () => {
-    setCurrentOrgId(5);
-    expect(getCurrentOrgId()).toBe(5);
-    expect(localStorage.getItem('current-org-id-v1')).toBe('5');
+describe('setCurrentHouseholdId / getCurrentHouseholdId', () => {
+  it('persists the chosen household id across calls via localStorage', () => {
+    setCurrentHouseholdId(5);
+    expect(getCurrentHouseholdId()).toBe(5);
+    expect(localStorage.getItem('current-household-id-v1')).toBe('5');
   });
 
-  it('clears the stored org id when set to null', () => {
-    setCurrentOrgId(5);
-    setCurrentOrgId(null);
-    expect(getCurrentOrgId()).toBeNull();
-    expect(localStorage.getItem('current-org-id-v1')).toBeNull();
+  it('clears the stored household id when set to null', () => {
+    setCurrentHouseholdId(5);
+    setCurrentHouseholdId(null);
+    expect(getCurrentHouseholdId()).toBeNull();
+    expect(localStorage.getItem('current-household-id-v1')).toBeNull();
   });
 });

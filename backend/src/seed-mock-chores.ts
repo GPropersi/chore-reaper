@@ -29,30 +29,28 @@ export type SeedMockChoresResult = { count: number };
 
 export async function seedMockChores(
   db: D1Database,
-  organizationId: number,
+  householdId: number,
   now: Date = new Date(),
 ): Promise<SeedMockChoresResult> {
   const existing = await db
-    .prepare('SELECT COUNT(*) as count FROM chores WHERE organization_id = ?')
-    .bind(organizationId)
+    .prepare('SELECT COUNT(*) as count FROM chores WHERE household_id = ?')
+    .bind(householdId)
     .first<{ count: number }>();
   if (existing && existing.count > 0) {
     throw new Error(
-      `Organization ${organizationId} already has ${existing.count} chore(s) — refusing to seed mock data on top of existing chores`,
+      `Household ${householdId} already has ${existing.count} chore(s) — refusing to seed mock data on top of existing chores`,
     );
   }
 
   const roomNames = Array.from(new Set(MOCK_CHORES.map((spec) => spec.room)));
   await db.batch(
     roomNames.map((name) =>
-      db
-        .prepare('INSERT OR IGNORE INTO rooms (organization_id, name) VALUES (?, ?)')
-        .bind(organizationId, name),
+      db.prepare('INSERT OR IGNORE INTO rooms (household_id, name) VALUES (?, ?)').bind(householdId, name),
     ),
   );
   const roomRows = await db
-    .prepare('SELECT id, name FROM rooms WHERE organization_id = ?')
-    .bind(organizationId)
+    .prepare('SELECT id, name FROM rooms WHERE household_id = ?')
+    .bind(householdId)
     .all<{ id: number; name: string }>();
   const roomIdByName = new Map(roomRows.results.map((row) => [row.name, row.id]));
 
@@ -61,11 +59,11 @@ export async function seedMockChores(
     return db
       .prepare(
         `INSERT INTO chores
-          (organization_id, name, room_id, date_last_completed, duration, frequency, long_term_task, version)
+          (household_id, name, room_id, date_last_completed, duration, frequency, long_term_task, version)
          VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
       )
       .bind(
-        organizationId,
+        householdId,
         spec.name,
         roomIdByName.get(spec.room),
         dateLastCompleted,

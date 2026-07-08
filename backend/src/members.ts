@@ -1,6 +1,6 @@
 export type MemberWire = {
   id: number;
-  organizationId: number;
+  householdId: number;
   email: string;
   role: 'admin' | 'member';
   timezone: string | null;
@@ -14,44 +14,44 @@ export type MemberInput = {
 
 type MembershipListRow = {
   id: number;
-  organization_id: number;
+  household_id: number;
   email: string;
   role: 'admin' | 'member';
   timezone: string | null;
 };
 
-export async function getMembersByOrg(db: D1Database, organizationId: number): Promise<MemberWire[]> {
+export async function getMembersByHousehold(db: D1Database, householdId: number): Promise<MemberWire[]> {
   const result = await db
     .prepare(
-      `SELECT u.id AS id, om.organization_id AS organization_id, u.email AS email,
+      `SELECT u.id AS id, om.household_id AS household_id, u.email AS email,
               om.role AS role, u.timezone AS timezone
-       FROM org_members om
+       FROM household_members om
        JOIN users u ON u.id = om.user_id
-       WHERE om.organization_id = ?
+       WHERE om.household_id = ?
        ORDER BY u.id`,
     )
-    .bind(organizationId)
+    .bind(householdId)
     .all<MembershipListRow>();
   return result.results.map((row) => ({
     id: row.id,
-    organizationId: row.organization_id,
+    householdId: row.household_id,
     email: row.email,
     role: row.role,
     timezone: row.timezone,
   }));
 }
 
-export type AddOrgMemberResult =
+export type AddHouseholdMemberResult =
   | { status: 'created'; member: MemberWire }
   | { status: 'added_existing'; member: MemberWire }
   | { status: 'already_member' };
 
-export async function addOrgMember(
+export async function addHouseholdMember(
   db: D1Database,
-  organizationId: number,
+  householdId: number,
   input: MemberInput,
   invitedBy: number,
-): Promise<AddOrgMemberResult> {
+): Promise<AddHouseholdMemberResult> {
   const email = input.email.trim().toLowerCase();
 
   const existing = await db
@@ -61,23 +61,23 @@ export async function addOrgMember(
 
   if (existing) {
     const existingMembership = await db
-      .prepare('SELECT id FROM org_members WHERE user_id = ? AND organization_id = ?')
-      .bind(existing.id, organizationId)
+      .prepare('SELECT id FROM household_members WHERE user_id = ? AND household_id = ?')
+      .bind(existing.id, householdId)
       .first<{ id: number }>();
     if (existingMembership) {
       return { status: 'already_member' };
     }
 
     await db
-      .prepare('INSERT INTO org_members (user_id, organization_id, role, invited_by) VALUES (?, ?, ?, ?)')
-      .bind(existing.id, organizationId, input.role, invitedBy)
+      .prepare('INSERT INTO household_members (user_id, household_id, role, invited_by) VALUES (?, ?, ?, ?)')
+      .bind(existing.id, householdId, input.role, invitedBy)
       .run();
 
     return {
       status: 'added_existing',
       member: {
         id: existing.id,
-        organizationId,
+        householdId,
         email: existing.email,
         role: input.role,
         timezone: existing.timezone,
@@ -85,20 +85,20 @@ export async function addOrgMember(
     };
   }
 
-  // Brand-new person. `users.organization_id`/`role`/`invited_by` are still
+  // Brand-new person. `users.household_id`/`role`/`invited_by` are still
   // physically NOT NULL columns (a follow-up migration removes them once the
-  // org_members cutover is verified in production), so this keeps writing a
+  // household_members cutover is verified in production), so this keeps writing a
   // value into them for constraint compliance — application code never reads
-  // them back; org_members is the sole source of truth for org/role from here.
+  // them back; household_members is the sole source of truth for household/role from here.
   const result = await db
-    .prepare('INSERT INTO users (organization_id, email, role, timezone, invited_by) VALUES (?, ?, ?, ?, ?)')
-    .bind(organizationId, email, input.role, input.timezone ?? null, invitedBy)
+    .prepare('INSERT INTO users (household_id, email, role, timezone, invited_by) VALUES (?, ?, ?, ?, ?)')
+    .bind(householdId, email, input.role, input.timezone ?? null, invitedBy)
     .run();
   const newUserId = result.meta.last_row_id;
 
   await db
-    .prepare('INSERT INTO org_members (user_id, organization_id, role, invited_by) VALUES (?, ?, ?, ?)')
-    .bind(newUserId, organizationId, input.role, invitedBy)
+    .prepare('INSERT INTO household_members (user_id, household_id, role, invited_by) VALUES (?, ?, ?, ?)')
+    .bind(newUserId, householdId, input.role, invitedBy)
     .run();
 
   const row = await db
@@ -108,18 +108,18 @@ export async function addOrgMember(
 
   return {
     status: 'created',
-    member: { id: row!.id, organizationId, email: row!.email, role: input.role, timezone: row!.timezone },
+    member: { id: row!.id, householdId, email: row!.email, role: input.role, timezone: row!.timezone },
   };
 }
 
-export async function removeOrgMember(
+export async function removeHouseholdMember(
   db: D1Database,
-  organizationId: number,
+  householdId: number,
   userId: number,
 ): Promise<boolean> {
   const result = await db
-    .prepare('DELETE FROM org_members WHERE user_id = ? AND organization_id = ?')
-    .bind(userId, organizationId)
+    .prepare('DELETE FROM household_members WHERE user_id = ? AND household_id = ?')
+    .bind(userId, householdId)
     .run();
   return result.meta.changes > 0;
 }

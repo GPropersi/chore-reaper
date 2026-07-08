@@ -1,12 +1,12 @@
 type RoomRow = {
   id: number;
-  organization_id: number;
+  household_id: number;
   name: string;
 };
 
 export type RoomWire = {
   id: number;
-  organizationId: number;
+  householdId: number;
   name: string;
 };
 
@@ -17,27 +17,27 @@ export type DeleteRoomResult =
   { status: 'ok' } | { status: 'not_found' } | { status: 'in_use'; choreCount: number };
 
 function rowToRoom(row: RoomRow): RoomWire {
-  return { id: row.id, organizationId: row.organization_id, name: row.name };
+  return { id: row.id, householdId: row.household_id, name: row.name };
 }
 
-export async function getRoomsByOrg(db: D1Database, organizationId: number): Promise<RoomWire[]> {
+export async function getRoomsByHousehold(db: D1Database, householdId: number): Promise<RoomWire[]> {
   const result = await db
-    .prepare('SELECT id, organization_id, name FROM rooms WHERE organization_id = ? ORDER BY name')
-    .bind(organizationId)
+    .prepare('SELECT id, household_id, name FROM rooms WHERE household_id = ? ORDER BY name')
+    .bind(householdId)
     .all<RoomRow>();
   return result.results.map(rowToRoom);
 }
 
 export async function createRoom(
   db: D1Database,
-  organizationId: number,
+  householdId: number,
   name: string,
 ): Promise<CreateRoomResult> {
   let lastRowId: number | bigint;
   try {
     const result = await db
-      .prepare('INSERT INTO rooms (organization_id, name) VALUES (?, ?)')
-      .bind(organizationId, name)
+      .prepare('INSERT INTO rooms (household_id, name) VALUES (?, ?)')
+      .bind(householdId, name)
       .run();
     lastRowId = result.meta.last_row_id;
   } catch (err) {
@@ -46,28 +46,28 @@ export async function createRoom(
   }
 
   const row = await db
-    .prepare('SELECT id, organization_id, name FROM rooms WHERE id = ? AND organization_id = ?')
-    .bind(lastRowId, organizationId)
+    .prepare('SELECT id, household_id, name FROM rooms WHERE id = ? AND household_id = ?')
+    .bind(lastRowId, householdId)
     .first<RoomRow>();
   return { status: 'ok', room: rowToRoom(row!) };
 }
 
 export async function renameRoom(
   db: D1Database,
-  organizationId: number,
+  householdId: number,
   id: number,
   name: string,
 ): Promise<RenameRoomResult> {
   const existing = await db
-    .prepare('SELECT id, organization_id, name FROM rooms WHERE id = ? AND organization_id = ?')
-    .bind(id, organizationId)
+    .prepare('SELECT id, household_id, name FROM rooms WHERE id = ? AND household_id = ?')
+    .bind(id, householdId)
     .first<RoomRow>();
   if (!existing) return { status: 'not_found' };
 
   try {
     await db
-      .prepare('UPDATE rooms SET name = ? WHERE id = ? AND organization_id = ?')
-      .bind(name, id, organizationId)
+      .prepare('UPDATE rooms SET name = ? WHERE id = ? AND household_id = ?')
+      .bind(name, id, householdId)
       .run();
   } catch (err) {
     if (!String(err).includes('UNIQUE constraint failed')) throw err;
@@ -75,39 +75,39 @@ export async function renameRoom(
   }
 
   const row = await db
-    .prepare('SELECT id, organization_id, name FROM rooms WHERE id = ? AND organization_id = ?')
-    .bind(id, organizationId)
+    .prepare('SELECT id, household_id, name FROM rooms WHERE id = ? AND household_id = ?')
+    .bind(id, householdId)
     .first<RoomRow>();
   return { status: 'ok', room: rowToRoom(row!) };
 }
 
-export async function deleteRoom(
-  db: D1Database,
-  organizationId: number,
-  id: number,
-): Promise<DeleteRoomResult> {
+export async function deleteRoom(db: D1Database, householdId: number, id: number): Promise<DeleteRoomResult> {
   const existing = await db
-    .prepare('SELECT id FROM rooms WHERE id = ? AND organization_id = ?')
-    .bind(id, organizationId)
+    .prepare('SELECT id FROM rooms WHERE id = ? AND household_id = ?')
+    .bind(id, householdId)
     .first<{ id: number }>();
   if (!existing) return { status: 'not_found' };
 
   const inUse = await db
-    .prepare('SELECT COUNT(*) as count FROM chores WHERE room_id = ? AND organization_id = ?')
-    .bind(id, organizationId)
+    .prepare('SELECT COUNT(*) as count FROM chores WHERE room_id = ? AND household_id = ?')
+    .bind(id, householdId)
     .first<{ count: number }>();
   if (inUse && inUse.count > 0) {
     return { status: 'in_use', choreCount: inUse.count };
   }
 
-  await db.prepare('DELETE FROM rooms WHERE id = ? AND organization_id = ?').bind(id, organizationId).run();
+  await db.prepare('DELETE FROM rooms WHERE id = ? AND household_id = ?').bind(id, householdId).run();
   return { status: 'ok' };
 }
 
-export async function roomBelongsToOrg(db: D1Database, organizationId: number, id: number): Promise<boolean> {
+export async function roomBelongsToHousehold(
+  db: D1Database,
+  householdId: number,
+  id: number,
+): Promise<boolean> {
   const row = await db
-    .prepare('SELECT id FROM rooms WHERE id = ? AND organization_id = ?')
-    .bind(id, organizationId)
+    .prepare('SELECT id FROM rooms WHERE id = ? AND household_id = ?')
+    .bind(id, householdId)
     .first<{ id: number }>();
   return row != null;
 }

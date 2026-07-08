@@ -15,7 +15,7 @@ export interface Chore {
 
 export interface Room {
   id: number;
-  organizationId: number;
+  householdId: number;
   name: string;
 }
 

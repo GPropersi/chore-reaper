@@ -23,7 +23,7 @@ type ChoreWire = {
 
 type MockMember = {
   id: number;
-  organizationId: number;
+  householdId: number;
   email: string;
   role: 'admin' | 'member';
   timezone: string | null;
@@ -31,7 +31,7 @@ type MockMember = {
 
 type MockRoom = {
   id: number;
-  organizationId: number;
+  householdId: number;
   name: string;
 };
 
@@ -42,13 +42,13 @@ function seedMe() {
     timezone: 'America/Chicago',
     memberships: [
       {
-        organizationId: 1,
-        organizationName: 'Preview Org',
-        organizationTimezone: 'America/Chicago',
+        householdId: 1,
+        householdName: 'Preview Household',
+        householdTimezone: 'America/Chicago',
         role: 'admin' as const,
       },
     ],
-    currentOrganizationId: 1,
+    currentHouseholdId: 1,
   };
 }
 
@@ -58,9 +58,9 @@ function daysAgoIso(now: number, days: number): string {
 
 function seedRooms(): MockRoom[] {
   return [
-    { id: 1, organizationId: 1, name: 'Living Room' },
-    { id: 2, organizationId: 1, name: 'Kitchen' },
-    { id: 3, organizationId: 1, name: 'Bathroom' },
+    { id: 1, householdId: 1, name: 'Living Room' },
+    { id: 2, householdId: 1, name: 'Kitchen' },
+    { id: 3, householdId: 1, name: 'Bathroom' },
   ];
 }
 
@@ -99,8 +99,8 @@ function seedChores(): ChoreWire[] {
 
 function seedMembers(): MockMember[] {
   return [
-    { id: 1, organizationId: 1, email: 'preview@example.com', role: 'admin', timezone: 'America/Chicago' },
-    { id: 2, organizationId: 1, email: 'roommate@example.com', role: 'member', timezone: null },
+    { id: 1, householdId: 1, email: 'preview@example.com', role: 'admin', timezone: 'America/Chicago' },
+    { id: 2, householdId: 1, email: 'roommate@example.com', role: 'member', timezone: null },
   ];
 }
 
@@ -135,7 +135,7 @@ const CHORE_ID_RE = /^\/api\/chores\/(\d+)$/;
 const CHORE_COMPLETE_RE = /^\/api\/chores\/(\d+)\/complete$/;
 const MEMBER_ID_RE = /^\/api\/members\/(\d+)$/;
 const ROOM_ID_RE = /^\/api\/rooms\/(\d+)$/;
-const ORGANIZATION_ID_RE = /^\/api\/organizations\/(\d+)$/;
+const HOUSEHOLD_ID_RE = /^\/api\/households\/(\d+)$/;
 
 export async function mockFetch(path: string, init?: RequestInit): Promise<Response> {
   const method = (init?.method ?? 'GET').toUpperCase();
@@ -191,7 +191,7 @@ export async function mockFetch(path: string, init?: RequestInit): Promise<Respo
   }
   if (path === '/api/members' && method === 'POST') {
     const body = parseBody(init);
-    const member = { organizationId: 1, timezone: null, ...body, id: nextMemberId++ } as MockMember;
+    const member = { householdId: 1, timezone: null, ...body, id: nextMemberId++ } as MockMember;
     members = [...members, member];
     return jsonResponse({ success: true, data: member }, 201);
   }
@@ -212,7 +212,7 @@ export async function mockFetch(path: string, init?: RequestInit): Promise<Respo
     if (rooms.some((r) => r.name === name)) {
       return jsonResponse({ success: false, error: 'A room with this name already exists' }, 409);
     }
-    const room: MockRoom = { id: nextRoomId++, organizationId: 1, name };
+    const room: MockRoom = { id: nextRoomId++, householdId: 1, name };
     rooms = [...rooms, room];
     return jsonResponse({ success: true, data: room }, 201);
   }
@@ -247,19 +247,19 @@ export async function mockFetch(path: string, init?: RequestInit): Promise<Respo
     return jsonResponse({ success: true, data: null });
   }
 
-  const orgIdMatch = path.match(ORGANIZATION_ID_RE);
-  if (orgIdMatch && method === 'PATCH') {
-    const orgId = Number(orgIdMatch[1]);
+  const householdIdMatch = path.match(HOUSEHOLD_ID_RE);
+  if (householdIdMatch && method === 'PATCH') {
+    const householdId = Number(householdIdMatch[1]);
     const body = parseBody(init);
-    const current = me.memberships.find((m) => m.organizationId === orgId);
-    const timezone = String(body.timezone ?? current?.organizationTimezone ?? 'UTC');
+    const current = me.memberships.find((m) => m.householdId === householdId);
+    const timezone = String(body.timezone ?? current?.householdTimezone ?? 'UTC');
     me = {
       ...me,
       memberships: me.memberships.map((m) =>
-        m.organizationId === orgId ? { ...m, organizationTimezone: timezone } : m,
+        m.householdId === householdId ? { ...m, householdTimezone: timezone } : m,
       ),
     };
-    return jsonResponse({ success: true, data: { id: orgId, name: 'Preview Org', timezone } });
+    return jsonResponse({ success: true, data: { id: householdId, name: 'Preview Household', timezone } });
   }
 
   return jsonResponse({ success: false, error: `mock not implemented for ${method} ${path}` }, 501);

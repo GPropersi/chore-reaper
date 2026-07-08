@@ -10,16 +10,16 @@ function jsonResponse(body: unknown) {
 }
 
 const initialMembers = [
-  { id: 1, organizationId: 1, email: 'admin@example.com', role: 'admin', timezone: 'America/Chicago' },
-  { id: 2, organizationId: 1, email: 'member@example.com', role: 'member', timezone: null },
+  { id: 1, householdId: 1, email: 'admin@example.com', role: 'admin', timezone: 'America/Chicago' },
+  { id: 2, householdId: 1, email: 'member@example.com', role: 'member', timezone: null },
 ];
 
 const noRoomsProps = {
   rooms: [],
   onRoomsChange: () => {},
-  organizationId: 1,
-  organizationTimezone: 'America/Chicago',
-  onOrgTimezoneChange: () => {},
+  householdId: 1,
+  householdTimezone: 'America/Chicago',
+  onHouseholdTimezoneChange: () => {},
 };
 
 beforeEach(() => {
@@ -34,7 +34,7 @@ beforeEach(() => {
       }
       if (url === '/api/members' && method === 'POST') {
         const body = JSON.parse(init!.body as string);
-        return jsonResponse({ success: true, data: { id: 3, organizationId: 1, ...body } });
+        return jsonResponse({ success: true, data: { id: 3, householdId: 1, ...body } });
       }
       if (url.startsWith('/api/members/') && method === 'DELETE') {
         return jsonResponse({ success: true, data: null });
@@ -92,7 +92,7 @@ describe('AdminPanel', () => {
           const body = JSON.parse(init!.body as string);
           return jsonResponse({
             success: true,
-            data: { id: 3, organizationId: 1, ...body },
+            data: { id: 3, householdId: 1, ...body },
             warning:
               'Member added, but could not be added to the Cloudflare Access allow-list automatically.',
           });

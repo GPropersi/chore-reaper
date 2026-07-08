@@ -15,13 +15,13 @@ describe('TimezoneSelect', () => {
   it('does not render an unset option by default', () => {
     render(<TimezoneSelect id="tz" label="Timezone" value="UTC" onChange={vi.fn()} />);
 
-    expect(screen.queryByText('Same as organization')).not.toBeInTheDocument();
+    expect(screen.queryByText('Same as household')).not.toBeInTheDocument();
   });
 
-  it('renders a "Same as organization" option when allowUnset is set', () => {
+  it('renders a "Same as household" option when allowUnset is set', () => {
     render(<TimezoneSelect id="tz" label="Timezone" value="" onChange={vi.fn()} allowUnset />);
 
-    expect(screen.getByText('Same as organization')).toBeInTheDocument();
+    expect(screen.getByText('Same as household')).toBeInTheDocument();
   });
 
   it('calls onChange with the selected value', async () => {

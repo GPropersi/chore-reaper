@@ -1,13 +1,13 @@
 import { Hono } from 'hono';
 import type { ApiResponse } from '../../../types/SharedTypes.js';
-import { getRoomsByOrg, createRoom, renameRoom, deleteRoom } from '../rooms.js';
+import { getRoomsByHousehold, createRoom, renameRoom, deleteRoom } from '../rooms.js';
 import { requireAdmin } from '../middleware/require-admin.js';
 import type { AppEnv } from '../types.js';
 
 const rooms = new Hono<AppEnv>();
 
 rooms.get('/', async (c) => {
-  const data = await getRoomsByOrg(c.env.DB, c.var.organizationId);
+  const data = await getRoomsByHousehold(c.env.DB, c.var.householdId);
   return c.json({ success: true, data } satisfies ApiResponse<typeof data>);
 });
 
@@ -16,7 +16,7 @@ rooms.post('/', requireAdmin, async (c) => {
   if (!body.name || typeof body.name !== 'string') {
     return c.json({ success: false, error: 'Missing required fields' } satisfies ApiResponse<never>, 400);
   }
-  const result = await createRoom(c.env.DB, c.var.organizationId, body.name);
+  const result = await createRoom(c.env.DB, c.var.householdId, body.name);
   if (result.status === 'duplicate') {
     return c.json(
       { success: false, error: 'A room with this name already exists' } satisfies ApiResponse<never>,
@@ -35,7 +35,7 @@ rooms.put('/:id', requireAdmin, async (c) => {
   if (!body.name || typeof body.name !== 'string') {
     return c.json({ success: false, error: 'Missing required fields' } satisfies ApiResponse<never>, 400);
   }
-  const result = await renameRoom(c.env.DB, c.var.organizationId, id, body.name);
+  const result = await renameRoom(c.env.DB, c.var.householdId, id, body.name);
   if (result.status === 'not_found') {
     return c.json({ success: false, error: 'Room not found' } satisfies ApiResponse<never>, 404);
   }
@@ -53,7 +53,7 @@ rooms.delete('/:id', requireAdmin, async (c) => {
   if (Number.isNaN(id)) {
     return c.json({ success: false, error: 'Invalid id' } satisfies ApiResponse<never>, 400);
   }
-  const result = await deleteRoom(c.env.DB, c.var.organizationId, id);
+  const result = await deleteRoom(c.env.DB, c.var.householdId, id);
   if (result.status === 'not_found') {
     return c.json({ success: false, error: 'Room not found' } satisfies ApiResponse<never>, 404);
   }

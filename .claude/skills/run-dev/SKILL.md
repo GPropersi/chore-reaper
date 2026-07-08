@@ -21,7 +21,7 @@ Before starting, verify:
 3. `frontend/.env.development.local` exists and has `VITE_DEV_ACCESS_JWT=...` set — if not, this is a
    real gap, not something to silently paper over: tell the user you need an email to mint a dev token
    for (an existing user in local D1, or one to bootstrap), then either
-   `npm run bootstrap-admin --workspace backend -- "<org>" <email>` to create one, or reuse an existing
+   `npm run bootstrap-admin --workspace backend -- "<household>" <email>` to create one, or reuse an existing
    local user. Then `npm run dev-jwt --workspace backend -- <email>` and write the printed token into
    `frontend/.env.development.local` as `VITE_DEV_ACCESS_JWT=<token>`. Don't guess an email silently.
 

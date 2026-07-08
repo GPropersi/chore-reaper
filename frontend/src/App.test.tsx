@@ -3,7 +3,7 @@ import { render, cleanup, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from './App';
 import { useMidnightClock } from './hooks/useMidnightClock';
-import { setCurrentOrgId } from './utils/api';
+import { setCurrentHouseholdId } from './utils/api';
 
 vi.mock('./hooks/useMidnightClock', () => ({
   useMidnightClock: vi.fn(() => new Date('2026-07-01T00:00:00.000Z')),
@@ -21,32 +21,32 @@ const meResponse = {
   timezone: 'Asia/Tokyo',
   memberships: [
     {
-      organizationId: 1,
-      organizationName: 'Org A',
-      organizationTimezone: 'America/New_York',
+      householdId: 1,
+      householdName: 'Household A',
+      householdTimezone: 'America/New_York',
       role: 'member' as const,
     },
   ],
-  currentOrganizationId: 1,
+  currentHouseholdId: 1,
 };
 
 const roomsResponse = {
   success: true,
   data: [
-    { id: 1, organizationId: 1, name: 'Living Room' },
-    { id: 2, organizationId: 1, name: 'Kitchen' },
+    { id: 1, householdId: 1, name: 'Living Room' },
+    { id: 2, householdId: 1, name: 'Kitchen' },
   ],
 };
 
 afterEach(() => {
   vi.unstubAllGlobals();
   localStorage.clear();
-  setCurrentOrgId(null);
+  setCurrentHouseholdId(null);
   cleanup();
 });
 
 describe('App', () => {
-  it("passes the org's timezone — not the viewing user's personal timezone — into useMidnightClock", async () => {
+  it("passes the household's timezone — not the viewing user's personal timezone — into useMidnightClock", async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn((input: RequestInfo | URL) => {
@@ -193,38 +193,41 @@ describe('App', () => {
     expect(screen.queryByRole('heading', { name: 'Members' })).not.toBeInTheDocument();
   });
 
-  describe('multi-org membership', () => {
-    const multiOrgMeResponse = {
+  describe('multi-household membership', () => {
+    const multiHouseholdMeResponse = {
       id: 1,
       email: 'a@example.com',
       timezone: 'UTC',
       memberships: [
         {
-          organizationId: 1,
-          organizationName: 'Org A',
-          organizationTimezone: 'UTC',
+          householdId: 1,
+          householdName: 'Household A',
+          householdTimezone: 'UTC',
           role: 'member' as const,
         },
-        { organizationId: 2, organizationName: 'Org B', organizationTimezone: 'UTC', role: 'admin' as const },
+        { householdId: 2, householdName: 'Household B', householdTimezone: 'UTC', role: 'admin' as const },
       ],
-      currentOrganizationId: 1,
+      currentHouseholdId: 1,
     };
 
-    function stubMultiOrgFetch() {
+    function stubMultiHouseholdFetch() {
       const calls: { url: string; headers: Record<string, string> }[] = [];
       vi.stubGlobal(
         'fetch',
         vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
           const url = typeof input === 'string' ? input : input.toString();
           const headers = new Headers(init?.headers);
-          const orgId = headers.get('X-Org-Id');
-          calls.push({ url, headers: { 'X-Org-Id': orgId ?? '' } });
+          const householdId = headers.get('X-Household-Id');
+          calls.push({ url, headers: { 'X-Household-Id': householdId ?? '' } });
 
           if (url === '/api/me') {
-            return jsonResponse({ ...multiOrgMeResponse, currentOrganizationId: orgId ? Number(orgId) : 1 });
+            return jsonResponse({
+              ...multiHouseholdMeResponse,
+              currentHouseholdId: householdId ? Number(householdId) : 1,
+            });
           }
           if (url === '/api/chores') {
-            const name = orgId === '2' ? 'Org B Chore' : 'Org A Chore';
+            const name = householdId === '2' ? 'Household B Chore' : 'Household A Chore';
             return jsonResponse({
               success: true,
               data: [
@@ -247,26 +250,26 @@ describe('App', () => {
       return calls;
     }
 
-    it('renders an org switcher only when the user has more than one membership', async () => {
-      stubMultiOrgFetch();
+    it('renders a household switcher only when the user has more than one membership', async () => {
+      stubMultiHouseholdFetch();
 
       render(<App />);
 
-      expect(await screen.findByLabelText('Organization')).toBeInTheDocument();
+      expect(await screen.findByLabelText('Household')).toBeInTheDocument();
     });
 
-    it('switching orgs sends the new X-Org-Id header and swaps the chore list to the other org', async () => {
+    it('switching households sends the new X-Household-Id header and swaps the chore list to the other household', async () => {
       const user = userEvent.setup();
-      stubMultiOrgFetch();
+      stubMultiHouseholdFetch();
 
       render(<App />);
 
-      await screen.findByText('Org A Chore');
+      await screen.findByText('Household A Chore');
 
-      await user.selectOptions(screen.getByLabelText('Organization'), 'Org B');
+      await user.selectOptions(screen.getByLabelText('Household'), 'Household B');
 
-      expect(await screen.findByText('Org B Chore')).toBeInTheDocument();
-      expect(screen.queryByText('Org A Chore')).not.toBeInTheDocument();
+      expect(await screen.findByText('Household B Chore')).toBeInTheDocument();
+      expect(screen.queryByText('Household A Chore')).not.toBeInTheDocument();
     });
   });
 });

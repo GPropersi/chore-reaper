@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isValidTimezone } from '../src/organizations.js';
+import { isValidTimezone } from '../src/households.js';
 
 describe('isValidTimezone', () => {
   it('accepts a real IANA timezone', () => {

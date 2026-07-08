@@ -20,24 +20,24 @@ beforeEach(() => {
 });
 
 describe('mockFetch: /api/me', () => {
-  it('returns a fake authenticated admin user with a single-org membership', async () => {
+  it('returns a fake authenticated admin user with a single-household membership', async () => {
     const res = await mockFetch('/api/me');
     expect(res.status).toBe(200);
     const me = await json<{
       email: string;
-      currentOrganizationId: number;
-      memberships: { organizationId: number; role: string }[];
+      currentHouseholdId: number;
+      memberships: { householdId: number; role: string }[];
     }>(res);
     expect(me.email).toBeTruthy();
     expect(me.memberships).toHaveLength(1);
     expect(me.memberships[0].role).toBe('admin');
-    expect(me.currentOrganizationId).toBe(me.memberships[0].organizationId);
+    expect(me.currentHouseholdId).toBe(me.memberships[0].householdId);
   });
 });
 
-describe('mockFetch: PATCH /api/organizations/:id', () => {
+describe('mockFetch: PATCH /api/households/:id', () => {
   it('updates the timezone and reflects it in a subsequent GET /api/me', async () => {
-    const res = await mockFetch('/api/organizations/1', {
+    const res = await mockFetch('/api/households/1', {
       method: 'PATCH',
       body: JSON.stringify({ timezone: 'Europe/London' }),
     });
@@ -45,10 +45,10 @@ describe('mockFetch: PATCH /api/organizations/:id', () => {
     const body = await json<{ data: { timezone: string } }>(res);
     expect(body.data.timezone).toBe('Europe/London');
 
-    const meRes = await json<{ memberships: { organizationId: number; organizationTimezone: string }[] }>(
+    const meRes = await json<{ memberships: { householdId: number; householdTimezone: string }[] }>(
       await mockFetch('/api/me'),
     );
-    expect(meRes.memberships.find((m) => m.organizationId === 1)?.organizationTimezone).toBe('Europe/London');
+    expect(meRes.memberships.find((m) => m.householdId === 1)?.householdTimezone).toBe('Europe/London');
   });
 });
 
