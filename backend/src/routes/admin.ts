@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { ApiResponse } from '../../../types/SharedTypes.js';
-import { getAllUsersWithHouseholds, deleteUser } from '../admin-users.js';
+import { getAllUsersWithHouseholds, deleteUser, promoteUserToAdmin } from '../admin-users.js';
 import { listAllHouseholds, createHousehold, isValidTimezone } from '../households.js';
 import { adminAddHouseholdMember } from '../members.js';
 import { listPendingJoinRequests, approveJoinRequest, denyJoinRequest } from '../join-requests.js';
@@ -123,6 +123,22 @@ admin.delete('/users/:id', async (c) => {
   });
 
   return c.json({ success: true, data: null, ...(warning ? { warning } : {}) } satisfies ApiResponse<null>);
+});
+
+// Grants global admin (users.is_admin) — separate from household_members.role,
+// which isn't wired into any app logic yet. One-way: there's no demote route.
+admin.post('/users/:id/promote', async (c) => {
+  const id = Number(c.req.param('id'));
+  if (Number.isNaN(id)) {
+    return c.json({ success: false, error: 'Invalid id' } satisfies ApiResponse<never>, 400);
+  }
+
+  const result = await promoteUserToAdmin(c.env.DB, id);
+  if (result.status === 'not_found') {
+    return c.json({ success: false, error: 'User not found' } satisfies ApiResponse<never>, 404);
+  }
+
+  return c.json({ success: true, data: result.user } satisfies ApiResponse<typeof result.user>);
 });
 
 admin.get('/join-requests', async (c) => {

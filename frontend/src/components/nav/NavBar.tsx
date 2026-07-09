@@ -2,30 +2,14 @@ import { NavLink, useLocation } from 'react-router-dom';
 import type { Room } from '@customTypes/SharedTypes';
 import RoomTab from './RoomTab';
 
-type Membership = {
-  householdId: number;
-  householdName: string;
-};
-
 type NavBarProps = {
   rooms: Room[];
   selectedRoom: string;
   onSelect: (room: string) => void;
   isAdmin?: boolean;
-  memberships?: Membership[];
-  currentHouseholdId?: number;
-  onSwitchHousehold?: (householdId: number) => void;
 };
 
-export default function NavBar({
-  rooms,
-  selectedRoom,
-  onSelect,
-  isAdmin = false,
-  memberships = [],
-  currentHouseholdId,
-  onSwitchHousehold,
-}: NavBarProps) {
+export default function NavBar({ rooms, selectedRoom, onSelect, isAdmin = false }: NavBarProps) {
   // Room tabs' active state is otherwise driven purely by selectedRoom,
   // which never resets on navigating away — so "All" stayed highlighted
   // even while on /admin. Room tabs are only ever actually active on Home.
@@ -40,24 +24,6 @@ export default function NavBar({
             scrolling. House sits outside this container entirely so it's
             never part of the scrolling region. */}
         <div className="flex items-center space-x-1 overflow-x-auto scrollbar-none min-w-0">
-          {/* Only rendered for the (still uncommon) case of belonging to more
-              than one household — no UI change at all for the common
-              single-household case. */}
-          {memberships.length > 1 && onSwitchHousehold && (
-            <select
-              aria-label="Household"
-              value={currentHouseholdId}
-              onChange={(e) => onSwitchHousehold(Number(e.target.value))}
-              // 16px below sm avoids iOS Safari's zoom-on-focus for <select>.
-              className="bg-gray-800 text-gray-200 text-base sm:text-sm rounded px-2 py-1 mr-2 flex-shrink-0"
-            >
-              {memberships.map((m) => (
-                <option key={m.householdId} value={m.householdId}>
-                  {m.householdName}
-                </option>
-              ))}
-            </select>
-          )}
           <RoomTab label="All" value="all" isActive={isHome && selectedRoom === 'all'} onClick={onSelect} />
           {rooms.map((room) => (
             <RoomTab

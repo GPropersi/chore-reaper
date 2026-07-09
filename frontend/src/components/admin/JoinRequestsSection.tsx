@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
+import { Check, X } from 'lucide-react';
 import type { ApiResponse, JoinRequest } from '@customTypes/SharedTypes';
 import { apiFetch } from '../../utils/api';
+import SwipeableRow from '../common/SwipeableRow';
 import type { Member } from './AdminPanel';
 
 type JoinRequestsSectionProps = {
@@ -51,29 +53,34 @@ export default function JoinRequestsSection({ onApproved }: JoinRequestsSectionP
       )}
       <ul className="space-y-2" data-testid="join-request-list">
         {requests.map((request) => (
-          <li key={request.id} className="flex justify-between items-center bg-gray-800 rounded-lg px-4 py-2">
-            <div>
-              <p className="text-white text-sm">{request.requestedEmail}</p>
-              <p className="text-gray-400 text-xs">
-                {request.householdName} · requested by {request.requestedByEmail}
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => handleApprove(request.id)}
-                className="text-green-400 hover:text-green-300 text-sm"
-              >
-                Approve
-              </button>
-              <button
-                type="button"
-                onClick={() => handleDeny(request.id)}
-                className="text-red-400 hover:text-red-300 text-sm"
-              >
-                Deny
-              </button>
-            </div>
+          <li key={request.id}>
+            <SwipeableRow
+              actions={[
+                {
+                  key: 'approve',
+                  label: 'Approve',
+                  icon: <Check size={14} />,
+                  onClick: () => handleApprove(request.id),
+                  colorClass: 'bg-green-600',
+                },
+                {
+                  key: 'deny',
+                  label: 'Deny',
+                  icon: <X size={14} />,
+                  onClick: () => handleDeny(request.id),
+                  colorClass: 'bg-red-600',
+                },
+              ]}
+            >
+              <div className="flex justify-between items-center bg-gray-800 rounded-lg px-4 py-2">
+                <div>
+                  <p className="text-white text-sm">{request.requestedEmail}</p>
+                  <p className="text-gray-400 text-xs">
+                    {request.householdName} · requested by {request.requestedByEmail}
+                  </p>
+                </div>
+              </div>
+            </SwipeableRow>
           </li>
         ))}
       </ul>

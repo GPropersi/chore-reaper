@@ -283,3 +283,72 @@ describe('DELETE /api/admin/users/:id', () => {
     expect(userRow).toBeNull();
   });
 });
+
+describe('POST /api/admin/users/:id/promote', () => {
+  it('returns 403 for a non-admin', async () => {
+    await seedHouseholdMember({ id: 1, householdId: 1, email: 'admin@example.com', isAdmin: true });
+    await seedHouseholdMember({ id: 2, householdId: 1, email: 'member@example.com' });
+
+    const res = await app.request(
+      '/api/admin/users/2/promote',
+      { method: 'POST', headers: await authHeader('member@example.com') },
+      testEnv(),
+    );
+    expect(res.status).toBe(403);
+
+    const stillMember = await env.DB.prepare('SELECT is_admin FROM users WHERE id = 2').first<{
+      is_admin: number;
+    }>();
+    expect(stillMember?.is_admin).toBe(0);
+  });
+
+  it('returns 404 for an unknown id', async () => {
+    await seedHouseholdMember({ id: 1, householdId: 1, email: 'admin@example.com', isAdmin: true });
+
+    const res = await app.request(
+      '/api/admin/users/999/promote',
+      { method: 'POST', headers: await authHeader('admin@example.com') },
+      testEnv(),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it('grants global admin and returns the updated user', async () => {
+    await seedHouseholdMember({ id: 1, householdId: 1, email: 'admin@example.com', isAdmin: true });
+    await seedHouseholdMember({ id: 2, householdId: 1, email: 'member@example.com' });
+    await seedAdditionalMembership(2, 2);
+
+    const res = await app.request(
+      '/api/admin/users/2/promote',
+      { method: 'POST', headers: await authHeader('admin@example.com') },
+      testEnv(),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      data: { id: number; email: string; isAdmin: boolean; households: { id: number }[] };
+    };
+    expect(body.data).toMatchObject({ id: 2, email: 'member@example.com', isAdmin: true });
+    expect(body.data.households.map((h) => h.id).sort()).toEqual([1, 2]);
+
+    const userRow = await env.DB.prepare('SELECT is_admin FROM users WHERE id = 2').first<{
+      is_admin: number;
+    }>();
+    expect(userRow?.is_admin).toBe(1);
+  });
+
+  it('does not touch household_members.role', async () => {
+    await seedHouseholdMember({ id: 1, householdId: 1, email: 'admin@example.com', isAdmin: true });
+    await seedHouseholdMember({ id: 2, householdId: 1, email: 'member@example.com' });
+
+    await app.request(
+      '/api/admin/users/2/promote',
+      { method: 'POST', headers: await authHeader('admin@example.com') },
+      testEnv(),
+    );
+
+    const membership = await env.DB.prepare(
+      'SELECT role FROM household_members WHERE user_id = 2 AND household_id = 1',
+    ).first<{ role: string }>();
+    expect(membership?.role).toBe('member');
+  });
+});

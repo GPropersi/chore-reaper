@@ -278,8 +278,8 @@ describe('ChoresView', () => {
     render(<ChoresView householdTimezone="UTC" rooms={mockRooms} />);
     await waitFor(() => expect(screen.getByText('Vacuum')).toBeInTheDocument());
 
-    const vacuumBar = screen.getByText('Vacuum').closest('[data-testid="chore-bar"]') as HTMLElement;
-    await user.click(within(vacuumBar).getByLabelText('Delete chore'));
+    const vacuumRow = screen.getByText('Vacuum').closest('[data-testid="chore-row"]') as HTMLElement;
+    await user.click(within(vacuumRow).getByLabelText('Delete chore'));
 
     await waitFor(() => expect(screen.queryByText('Vacuum')).not.toBeInTheDocument());
   });
@@ -343,8 +343,8 @@ describe('ChoresView', () => {
     });
     await waitFor(() => expect(testOutbox.getEntries()).toHaveLength(0));
 
-    const vacuumBarAfterSync = screen.getByText('Vacuum').closest('[data-testid="chore-bar"]') as HTMLElement;
-    await user.click(within(vacuumBarAfterSync).getByLabelText('Edit chore'));
+    const vacuumRowAfterSync = screen.getByText('Vacuum').closest('[data-testid="chore-row"]') as HTMLElement;
+    await user.click(within(vacuumRowAfterSync).getByLabelText('Edit chore'));
     await user.click(screen.getByRole('button', { name: 'Save Changes' }));
 
     await waitFor(() => expect(putBody).toMatchObject({ version: 2 }));

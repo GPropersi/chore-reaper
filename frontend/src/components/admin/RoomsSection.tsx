@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { Trash2 } from 'lucide-react';
 import type { Room } from '@customTypes/SharedTypes';
 import ConfirmDialog from '../common/ConfirmDialog';
 import StatusBanner from '../common/StatusBanner';
+import SwipeableRow from '../common/SwipeableRow';
 import { apiFetch } from '../../utils/api';
 
 type ApiResponse<T> = { success: boolean; data?: T; error?: string };
@@ -107,38 +109,48 @@ export default function RoomsSection({ rooms, onRoomsChange }: RoomsSectionProps
 
       <ul className="space-y-2" data-testid="room-list">
         {rooms.map((room) => (
-          <li key={room.id} className="flex justify-between items-center bg-gray-800 rounded-lg px-4 py-2">
-            {editingId === room.id ? (
-              <input
-                type="text"
-                value={editingName}
-                onChange={(e) => setEditingName(e.target.value)}
-                onBlur={() => handleRename(room.id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleRename(room.id);
-                  if (e.key === 'Escape') setEditingId(null);
-                }}
-                autoFocus
-                aria-label={`Rename ${room.name}`}
-                // 16px below sm avoids iOS Safari's zoom-on-focus.
-                className="bg-gray-700 text-white rounded px-2 py-1 text-base sm:text-sm"
-              />
-            ) : (
-              <button
-                type="button"
-                onClick={() => startRename(room)}
-                className="text-white text-sm text-left"
-              >
-                {room.name}
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => setPendingDeleteId(room.id)}
-              className="text-red-400 hover:text-red-300 text-sm"
+          <li key={room.id}>
+            <SwipeableRow
+              actions={[
+                {
+                  key: 'remove',
+                  label: 'Remove',
+                  icon: <Trash2 size={14} />,
+                  onClick: () => setPendingDeleteId(room.id),
+                  colorClass: 'bg-red-600',
+                },
+              ]}
             >
-              Remove
-            </button>
+              <div className="flex justify-between items-center bg-gray-800 rounded-lg px-4 py-2">
+                {editingId === room.id ? (
+                  <input
+                    type="text"
+                    value={editingName}
+                    onChange={(e) => setEditingName(e.target.value)}
+                    onBlur={() => handleRename(room.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleRename(room.id);
+                      if (e.key === 'Escape') setEditingId(null);
+                    }}
+                    autoFocus
+                    aria-label={`Rename ${room.name}`}
+                    // 16px below sm avoids iOS Safari's zoom-on-focus.
+                    className="bg-gray-700 text-white rounded px-2 py-1 text-base sm:text-sm"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      startRename(room);
+                    }}
+                    className="text-white text-sm text-left"
+                  >
+                    {room.name}
+                  </button>
+                )}
+              </div>
+            </SwipeableRow>
           </li>
         ))}
       </ul>
