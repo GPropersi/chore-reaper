@@ -146,7 +146,14 @@ scripts/           Root-level scripts (git hooks installer)
     route sits behind `requireGlobalAdmin`). Backed by `adminAddHouseholdMember` in `members.ts`, a
     counterpart to `addHouseholdMember` with no `callerIsAdmin` gate (the caller is already verified
     admin) and an optional `makeAdmin` flag that sets `users.is_admin` on the brand-new-account path only
-    (never on the already-has-an-account path). Frontend: `AdminPanel.tsx` → `AddUserModal.tsx`.
+    (never on the already-has-an-account path). Also accepts `newHouseholdName` as an alternative to
+    `householdId`, to create the household and the member in one request — the route calls
+    `createHousehold` (same 409-on-duplicate-name behavior as `POST /api/admin/households`) first to
+    resolve an id, reusing the submitted `timezone` for the household's own timezone too (there's no
+    separate household-timezone field on this form) and defaulting to `'UTC'` if none/invalid. Frontend:
+    `AdminPanel.tsx` → `AddUserModal.tsx` → `HouseholdSearchSelect.tsx`, whose combobox offers a
+    "Create new household" option (with an inline indicator once picked) when the typed name matches no
+    existing household.
   - `GET /api/admin/join-requests`, `POST /api/admin/join-requests/:id/approve`,
     `POST /api/admin/join-requests/:id/deny` — the admin side of the join-request workflow below.
   - `DELETE /api/admin/users/:id` — deletes a user account outright (not just a single household

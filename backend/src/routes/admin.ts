@@ -53,11 +53,35 @@ admin.post('/households', async (c) => {
 // of this route (an admin adding someone to a household they may not belong
 // to themselves), and it's safe only because requireGlobalAdmin already
 // verified the caller is a global admin.
+//
+// A caller may supply newHouseholdName instead of householdId, to create the
+// household and the member in one step (the household's own timezone reuses
+// the member's timezone, since this form has no separate field for it).
 admin.post('/members', async (c) => {
   const body = await c.req.json<Record<string, unknown>>();
-  const householdId = Number(body.householdId);
-  if (!body.email || Number.isNaN(householdId)) {
+  const newHouseholdName = typeof body.newHouseholdName === 'string' ? body.newHouseholdName.trim() : '';
+
+  if (!body.email || (!newHouseholdName && Number.isNaN(Number(body.householdId)))) {
     return c.json({ success: false, error: 'Missing required fields' } satisfies ApiResponse<never>, 400);
+  }
+
+  let householdId: number;
+  if (newHouseholdName) {
+    const timezone =
+      typeof body.timezone === 'string' && isValidTimezone(body.timezone) ? body.timezone : 'UTC';
+    const householdResult = await createHousehold(c.env.DB, newHouseholdName, timezone);
+    if (householdResult.status === 'duplicate_name') {
+      return c.json(
+        {
+          success: false,
+          error: `A household named "${newHouseholdName}" already exists`,
+        } satisfies ApiResponse<never>,
+        409,
+      );
+    }
+    householdId = householdResult.household.id;
+  } else {
+    householdId = Number(body.householdId);
   }
 
   const result = await adminAddHouseholdMember(

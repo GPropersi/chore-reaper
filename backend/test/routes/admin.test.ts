@@ -283,6 +283,43 @@ describe('POST /api/admin/members', () => {
     expect(res.status).toBe(409);
   });
 
+  it('creates a brand-new household and adds the member to it when newHouseholdName is given', async () => {
+    const res = await app.request(
+      '/api/admin/members',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await authHeader('admin@example.com')) },
+        body: JSON.stringify({
+          newHouseholdName: 'Household C',
+          email: 'new@example.com',
+          timezone: 'America/Chicago',
+        }),
+      },
+      testEnv(),
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { data: { householdId: number; email: string } };
+    expect(body.data.email).toBe('new@example.com');
+
+    const household = await env.DB.prepare('SELECT name, timezone FROM households WHERE id = ?')
+      .bind(body.data.householdId)
+      .first<{ name: string; timezone: string }>();
+    expect(household).toMatchObject({ name: 'Household C', timezone: 'America/Chicago' });
+  });
+
+  it('returns 409 when newHouseholdName collides with an existing household', async () => {
+    const res = await app.request(
+      '/api/admin/members',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await authHeader('admin@example.com')) },
+        body: JSON.stringify({ newHouseholdName: 'Household A', email: 'new@example.com' }),
+      },
+      testEnv(),
+    );
+    expect(res.status).toBe(409);
+  });
+
   it('grants Cloudflare Access on creation', async () => {
     const fetchMock = stubJwksAndPolicy([]);
     const res = await app.request(
