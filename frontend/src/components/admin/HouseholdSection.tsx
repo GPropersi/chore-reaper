@@ -1,6 +1,8 @@
 import { useState } from 'react';
+import { ArrowLeftRight } from 'lucide-react';
 import TimezoneSelect from '../form/TimezoneSelect';
 import StatusBanner from '../common/StatusBanner';
+import SwitchHouseholdModal from './SwitchHouseholdModal';
 import { apiFetch } from '../../utils/api';
 
 type ApiResponse<T> = { success: boolean; data?: T; error?: string };
@@ -32,6 +34,7 @@ export default function HouseholdSection({
   const [timezone, setTimezone] = useState(householdTimezone);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [isSwitcherOpen, setIsSwitcherOpen] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -58,23 +61,32 @@ export default function HouseholdSection({
         <h2 className="text-white text-lg font-semibold">Household</h2>
       </div>
       <div className="flex items-center gap-2 mb-4">
-        <p className="text-gray-300 text-sm">{householdName}</p>
+        <p className="text-gray-300 text-sm" data-testid="household-name">
+          {householdName}
+        </p>
         {memberships.length > 1 && (
-          <select
+          <button
+            type="button"
             aria-label="Switch household"
-            value={currentHouseholdId}
-            onChange={(e) => onSwitchHousehold(Number(e.target.value))}
-            // 16px below sm avoids iOS Safari's zoom-on-focus for <select>.
-            className="bg-gray-800 text-gray-200 text-base sm:text-sm rounded px-2 py-1"
+            onClick={() => setIsSwitcherOpen(true)}
+            className="p-1.5 rounded-full text-gray-400 hover:text-gray-200 hover:bg-gray-700 min-w-[32px] min-h-[32px] flex items-center justify-center"
           >
-            {memberships.map((m) => (
-              <option key={m.householdId} value={m.householdId}>
-                {m.householdName}
-              </option>
-            ))}
-          </select>
+            <ArrowLeftRight className="w-4 h-4" aria-hidden="true" />
+          </button>
         )}
       </div>
+
+      {isSwitcherOpen && (
+        <SwitchHouseholdModal
+          memberships={memberships}
+          currentHouseholdId={currentHouseholdId}
+          onSelect={(id) => {
+            onSwitchHousehold(id);
+            setIsSwitcherOpen(false);
+          }}
+          onCancel={() => setIsSwitcherOpen(false)}
+        />
+      )}
       <form onSubmit={handleSubmit} className="flex items-end gap-2">
         <div className="flex-1">
           <TimezoneSelect

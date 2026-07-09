@@ -92,3 +92,33 @@ test('admin can add a user to a household other than their own current one via t
   await expect(page.getByText('Added other-house-e2e@example.com to the selected household.')).toBeVisible();
   await expect(page.getByTestId('member-list').getByText('other-house-e2e@example.com')).not.toBeVisible();
 });
+
+test('admin with multiple household memberships sees and can use the switcher in the admin panel', async ({
+  page,
+}) => {
+  // admin-e2e belongs to both household 1 (E2E Household, 2 rooms seeded)
+  // and household 3 (E2E Household C, zero rooms) — see global-setup.ts.
+  const token = await signE2eJwt('admin-e2e@example.com');
+  await page.setExtraHTTPHeaders({ 'Cf-Access-Jwt-Assertion': token });
+
+  await page.goto('/');
+  await page.getByTestId('admin-nav-link').click();
+  await expect(page.getByRole('heading', { name: 'Members' })).toBeVisible();
+
+  const roomList = page.getByTestId('room-list');
+  const householdName = page.getByTestId('household-name');
+  await expect(householdName).toHaveText('E2E Household');
+  await expect(page.getByRole('heading', { name: 'Rooms' })).toBeVisible();
+  await expect(roomList.getByRole('button', { name: 'Living Room' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Switch household' }).click();
+  const modal = page.getByTestId('switch-household-modal-backdrop');
+  await modal.getByLabel('Search households').fill('Household C');
+  await modal.getByRole('button', { name: 'E2E Household C' }).click();
+
+  // Switching remounts the household-scoped subtree (App.tsx's `key` on
+  // Layout), so the whole panel — name, room list, member list — reflects
+  // the new household rather than just the switcher's own selected value.
+  await expect(householdName).toHaveText('E2E Household C');
+  await expect(roomList.getByRole('button', { name: 'Living Room' })).not.toBeVisible();
+});

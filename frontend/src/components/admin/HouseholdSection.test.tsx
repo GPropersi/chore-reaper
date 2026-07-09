@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import HouseholdSection from './HouseholdSection';
 
@@ -70,12 +70,12 @@ describe('HouseholdSection', () => {
     expect(screen.getByText('The Smith House')).toBeInTheDocument();
   });
 
-  it('hides the switcher when the viewer belongs to only one household', () => {
+  it('hides the switcher button when the viewer belongs to only one household', () => {
     render(<HouseholdSection {...baseProps} />);
-    expect(screen.queryByLabelText('Switch household')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Switch household' })).not.toBeInTheDocument();
   });
 
-  it('shows the switcher and calls onSwitchHousehold when the viewer belongs to more than one', async () => {
+  it('opens the switcher modal, and selecting a household calls onSwitchHousehold and closes it', async () => {
     const user = userEvent.setup();
     const onSwitchHousehold = vi.fn();
     render(
@@ -89,9 +89,13 @@ describe('HouseholdSection', () => {
       />,
     );
 
-    const switcher = screen.getByLabelText('Switch household');
-    expect(switcher).toBeInTheDocument();
-    await user.selectOptions(switcher, '2');
+    const switcherButton = screen.getByRole('button', { name: 'Switch household' });
+    await user.click(switcherButton);
+
+    const modal = screen.getByTestId('switch-household-modal-backdrop');
+    await user.click(within(modal).getByRole('button', { name: 'The Jones House' }));
+
     expect(onSwitchHousehold).toHaveBeenCalledWith(2);
+    expect(screen.queryByTestId('switch-household-modal-backdrop')).not.toBeInTheDocument();
   });
 });
