@@ -150,6 +150,7 @@ let nextChoreId = 4;
 let nextMemberId = 3;
 let nextRoomId = 4;
 let nextJoinRequestId = 2;
+let nextHouseholdId = 3;
 
 export function resetMockData(): void {
   chores = seedChores();
@@ -162,6 +163,7 @@ export function resetMockData(): void {
   nextMemberId = 3;
   nextRoomId = 4;
   nextJoinRequestId = 2;
+  nextHouseholdId = 3;
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -297,6 +299,18 @@ export async function mockFetch(path: string, init?: RequestInit): Promise<Respo
 
   if (path === '/api/admin/households' && method === 'GET') {
     return jsonResponse({ success: true, data: households });
+  }
+  if (path === '/api/admin/households' && method === 'POST') {
+    const body = parseBody(init);
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    if (!name) return jsonResponse({ success: false, error: 'Missing required fields' }, 400);
+    if (households.some((h) => h.name === name)) {
+      return jsonResponse({ success: false, error: `A household named "${name}" already exists` }, 409);
+    }
+    const timezone = typeof body.timezone === 'string' && body.timezone ? body.timezone : 'UTC';
+    const household: MockHousehold = { id: nextHouseholdId++, name };
+    households = [...households, household];
+    return jsonResponse({ success: true, data: { ...household, timezone } }, 201);
   }
   if (path === '/api/admin/members' && method === 'POST') {
     const body = parseBody(init);

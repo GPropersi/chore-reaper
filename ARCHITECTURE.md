@@ -128,7 +128,18 @@ scripts/           Root-level scripts (git hooks installer)
   - `GET /api/admin/users` — read-only directory of every user in the app and which household(s) they
     belong to, rendered at the bottom of the frontend's Admin page (`AdminPanel.tsx` → `UsersDirectory.tsx`).
   - `GET /api/admin/households` — lists every household (id + name), powering the searchable household
-    picker (`HouseholdSearchSelect.tsx`) in the admin-only "Add User" flow below.
+    picker (`HouseholdSearchSelect.tsx`) in the admin-only "Add User" flow below, and the read side of
+    `HouseholdsDirectory.tsx` (see the `POST` counterpart below).
+  - `POST /api/admin/households` — creates a bare household (name + timezone, defaulting to `'UTC'` if
+    omitted, validated with the same `isValidTimezone` the `PATCH /api/households/:id` route uses).
+    409s on a duplicate name. Deliberately bare — unlike `bootstrap-admin.ts` (the CLI script this
+    replaces as the normal way to create a household), it does not also create a user/admin or
+    `household_members` row; an admin adds people to the new household afterward via the existing
+    `POST /api/admin/members` flow. Backed by `createHousehold` in `households.ts`. Frontend:
+    `AdminPanel.tsx` → `HouseholdsDirectory.tsx` → `CreateHouseholdModal.tsx` — this section is
+    self-contained (fetches, creates, and updates its own list) rather than parent-orchestrated like
+    `UsersDirectory`/`AddUserModal`, since creating a household never needs to update any of
+    `AdminPanel`'s own state.
   - `POST /api/admin/members` — lets an admin add a user (new or existing) to _any_ household, not just
     their own current one, since the target `householdId` is caller-supplied here rather than sourced
     from session (the one deliberate exception to the tenant-isolation rule below — safe only because this
@@ -306,6 +317,7 @@ mean this can never be offline-_capable_, only offline-_tolerant_). Two mechanis
 | Change how household scoping/switching resolves                   | `backend/src/middleware/household-scope.ts`                                                                                                                                                                                                         |
 | Change global admin status/gating or the all-users directory      | `backend/src/middleware/require-global-admin.ts`, `backend/src/admin-users.ts`, `backend/src/routes/admin.ts`, `frontend/src/components/admin/UsersDirectory.tsx`                                                                                   |
 | Change admin cross-household add-user or the household picker     | `backend/src/routes/admin.ts` (`POST /members`), `backend/src/members.ts` (`adminAddHouseholdMember`), `frontend/src/components/admin/AddUserModal.tsx`, `frontend/src/components/form/HouseholdSearchSelect.tsx`                                   |
+| Change household creation (the Households directory)              | `backend/src/routes/admin.ts` (`POST /households`), `backend/src/households.ts` (`createHousehold`), `frontend/src/components/admin/HouseholdsDirectory.tsx`, `frontend/src/components/admin/CreateHouseholdModal.tsx`                              |
 | Change the join-request (member-requests-new-user) workflow       | `backend/src/join-requests.ts`, `backend/src/routes/members.ts` (`POST /requests`), `backend/src/routes/admin.ts` (`/join-requests/*`), `frontend/src/components/admin/AddMemberModal.tsx`, `frontend/src/components/admin/JoinRequestsSection.tsx` |
 | Change the household name/switcher shown in the admin panel       | `frontend/src/components/admin/HouseholdSection.tsx` (uses the same `switchHousehold` plumbing as `NavBar.tsx`, threaded through `App.tsx`/`AdminPanel.tsx`)                                                                                        |
 | Add a DB column/table                                             | New file in `backend/migrations/` — never edit a merged one                                                                                                                                                                                         |

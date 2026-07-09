@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { ApiResponse } from '../../../types/SharedTypes.js';
 import { getAllUsersWithHouseholds, deleteUser } from '../admin-users.js';
-import { listAllHouseholds } from '../households.js';
+import { listAllHouseholds, createHousehold, isValidTimezone } from '../households.js';
 import { adminAddHouseholdMember } from '../members.js';
 import { listPendingJoinRequests, approveJoinRequest, denyJoinRequest } from '../join-requests.js';
 import { grantAccessAndDescribeWarning, revokeAccessAndDescribeWarning } from '../access-allowlist.js';
@@ -17,6 +17,35 @@ admin.get('/users', async (c) => {
 admin.get('/households', async (c) => {
   const data = await listAllHouseholds(c.env.DB);
   return c.json({ success: true, data } satisfies ApiResponse<typeof data>);
+});
+
+// Previously the only way to create a household was the bootstrap-admin CLI
+// script (backend/src/bootstrap-admin.ts) — this is the in-app equivalent,
+// minus the script's bundled "create the first admin user" step, since an
+// admin can already add people to the new household via POST
+// /api/admin/members once it exists.
+admin.post('/households', async (c) => {
+  const body = await c.req.json<Record<string, unknown>>();
+  const name = typeof body.name === 'string' ? body.name.trim() : '';
+  if (!name) {
+    return c.json({ success: false, error: 'Missing required fields' } satisfies ApiResponse<never>, 400);
+  }
+
+  const timezone = typeof body.timezone === 'string' && body.timezone ? body.timezone : 'UTC';
+  if (!isValidTimezone(timezone)) {
+    return c.json({ success: false, error: 'Invalid timezone' } satisfies ApiResponse<never>, 400);
+  }
+
+  const result = await createHousehold(c.env.DB, name, timezone);
+  if (result.status === 'duplicate_name') {
+    return c.json(
+      { success: false, error: `A household named "${name}" already exists` } satisfies ApiResponse<never>,
+      409,
+    );
+  }
+
+  const data = result.household;
+  return c.json({ success: true, data } satisfies ApiResponse<typeof data>, 201);
 });
 
 // Cross-household add: unlike POST /api/members, householdId is admin-supplied
