@@ -8,9 +8,14 @@ import SwipeableRow from '../common/SwipeableRow';
 type UsersDirectoryProps = {
   currentUserId: number;
   headerAction?: ReactNode;
+  // Bumped by AdminPanel whenever a user is added or a join request is
+  // approved — this section otherwise has no way to learn about that, since
+  // it fetches its own list independently rather than sharing state with
+  // AddUserModal/JoinRequestsSection.
+  refreshKey?: number;
 };
 
-export default function UsersDirectory({ currentUserId, headerAction }: UsersDirectoryProps) {
+export default function UsersDirectory({ currentUserId, headerAction, refreshKey }: UsersDirectoryProps) {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
   const [pendingPromoteId, setPendingPromoteId] = useState<number | null>(null);
@@ -20,7 +25,7 @@ export default function UsersDirectory({ currentUserId, headerAction }: UsersDir
     apiFetch('/api/admin/users')
       .then((res) => res.json())
       .then((body: ApiResponse<AdminUser[]>) => setUsers(body.data ?? []));
-  }, []);
+  }, [refreshKey]);
 
   async function handleConfirmDelete() {
     const id = pendingDeleteId;
