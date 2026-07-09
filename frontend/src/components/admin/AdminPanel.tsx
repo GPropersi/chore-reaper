@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
+import { Trash2 } from 'lucide-react';
 import type { Room } from '@customTypes/SharedTypes';
 import ConfirmDialog from '../common/ConfirmDialog';
 import StatusBanner from '../common/StatusBanner';
+import SwipeableRow from '../common/SwipeableRow';
 import AddMemberModal, { type AddMemberInput } from './AddMemberModal';
 import AddUserModal, { type AddUserInput } from './AddUserModal';
 import RoomsSection from './RoomsSection';
@@ -173,28 +175,35 @@ export default function AdminPanel({
 
       <ul className="space-y-2" data-testid="member-list">
         {members.map((member) => (
-          <li key={member.id} className="flex justify-between items-center bg-gray-800 rounded-lg px-4 py-2">
-            <div>
-              <div className="flex items-center gap-2">
-                <p className="text-white text-sm">{member.email}</p>
-                {member.isAdmin && (
-                  <span
-                    data-testid="admin-badge"
-                    className="text-[10px] font-semibold uppercase tracking-wide text-indigo-400 bg-indigo-900/50 px-2 py-0.5 rounded-full"
-                  >
-                    Admin
-                  </span>
-                )}
-              </div>
-              {member.timezone && <p className="text-gray-400 text-xs">{member.timezone}</p>}
-            </div>
-            <button
-              type="button"
-              onClick={() => setPendingDeleteId(member.id)}
-              className="text-red-400 hover:text-red-300 text-sm"
+          <li key={member.id}>
+            <SwipeableRow
+              actions={[
+                {
+                  key: 'remove',
+                  label: 'Remove',
+                  icon: <Trash2 size={14} />,
+                  onClick: () => setPendingDeleteId(member.id),
+                  colorClass: 'bg-red-600',
+                },
+              ]}
             >
-              Remove
-            </button>
+              <div className="flex justify-between items-center bg-gray-800 rounded-lg px-4 py-2">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="text-white text-sm">{member.email}</p>
+                    {member.isAdmin && (
+                      <span
+                        data-testid="admin-badge"
+                        className="text-[10px] font-semibold uppercase tracking-wide text-indigo-400 bg-indigo-900/50 px-2 py-0.5 rounded-full"
+                      >
+                        Admin
+                      </span>
+                    )}
+                  </div>
+                  {member.timezone && <p className="text-gray-400 text-xs">{member.timezone}</p>}
+                </div>
+              </div>
+            </SwipeableRow>
           </li>
         ))}
       </ul>

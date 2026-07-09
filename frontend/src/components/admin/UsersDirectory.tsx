@@ -1,7 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { Trash2 } from 'lucide-react';
 import type { AdminUser, ApiResponse } from '@customTypes/SharedTypes';
 import { apiFetch } from '../../utils/api';
 import ConfirmDialog from '../common/ConfirmDialog';
+import SwipeableRow from '../common/SwipeableRow';
 
 type UsersDirectoryProps = {
   currentUserId: number;
@@ -11,6 +13,7 @@ type UsersDirectoryProps = {
 export default function UsersDirectory({ currentUserId, headerAction }: UsersDirectoryProps) {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
+  const [pendingPromoteId, setPendingPromoteId] = useState<number | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
 
   useEffect(() => {
@@ -33,6 +36,20 @@ export default function UsersDirectory({ currentUserId, headerAction }: UsersDir
     setPendingDeleteId(null);
   }
 
+  async function handleConfirmPromote() {
+    const id = pendingPromoteId;
+    if (id == null) return;
+    const res = await apiFetch(`/api/admin/users/${id}/promote`, { method: 'POST' });
+    const body = (await res.json()) as ApiResponse<AdminUser>;
+    if (body.success && body.data) {
+      const updated = body.data;
+      setUsers((prev) => prev.map((user) => (user.id === id ? updated : user)));
+    } else {
+      setWarning(body.error ?? 'Could not promote user');
+    }
+    setPendingPromoteId(null);
+  }
+
   return (
     <div className="mt-8">
       <div className="flex justify-between items-center mb-4">
@@ -48,35 +65,58 @@ export default function UsersDirectory({ currentUserId, headerAction }: UsersDir
 
       <ul className="space-y-2" data-testid="admin-user-list">
         {users.map((user) => (
-          <li key={user.id} className="flex justify-between items-center bg-gray-800 rounded-lg px-4 py-2">
-            <div>
-              <div className="flex items-center gap-2">
-                <p className="text-white text-sm">{user.email}</p>
-                {user.isAdmin && (
-                  <span
-                    data-testid="admin-badge"
-                    className="text-[10px] font-semibold uppercase tracking-wide text-indigo-400 bg-indigo-900/50 px-2 py-0.5 rounded-full"
-                  >
-                    Admin
-                  </span>
-                )}
+          <li key={user.id}>
+            <SwipeableRow
+              actions={
+                user.id !== currentUserId
+                  ? [
+                      {
+                        key: 'delete',
+                        label: 'Delete',
+                        icon: <Trash2 size={14} />,
+                        onClick: () => setPendingDeleteId(user.id),
+                        colorClass: 'bg-red-600',
+                      },
+                    ]
+                  : []
+              }
+            >
+              <div className="flex justify-between items-center bg-gray-800 rounded-lg px-4 py-2">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="text-white text-sm">{user.email}</p>
+                    {user.isAdmin && (
+                      <span
+                        data-testid="admin-badge"
+                        className="text-[10px] font-semibold uppercase tracking-wide text-indigo-400 bg-indigo-900/50 px-2 py-0.5 rounded-full"
+                      >
+                        Admin
+                      </span>
+                    )}
+                  </div>
+                  {user.timezone && <p className="text-gray-400 text-xs">{user.timezone}</p>}
+                </div>
+                <div className="flex items-center gap-3">
+                  <p className="text-gray-400 text-xs text-right">
+                    {user.households.length > 0
+                      ? user.households.map((h) => h.name).join(', ')
+                      : 'No households'}
+                  </p>
+                  {!user.isAdmin && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPendingPromoteId(user.id);
+                      }}
+                      className="text-indigo-400 hover:text-indigo-300 text-sm"
+                    >
+                      Promote
+                    </button>
+                  )}
+                </div>
               </div>
-              {user.timezone && <p className="text-gray-400 text-xs">{user.timezone}</p>}
-            </div>
-            <div className="flex items-center gap-3">
-              <p className="text-gray-400 text-xs text-right">
-                {user.households.length > 0 ? user.households.map((h) => h.name).join(', ') : 'No households'}
-              </p>
-              {user.id !== currentUserId && (
-                <button
-                  type="button"
-                  onClick={() => setPendingDeleteId(user.id)}
-                  className="text-red-400 hover:text-red-300 text-sm"
-                >
-                  Delete
-                </button>
-              )}
-            </div>
+            </SwipeableRow>
           </li>
         ))}
       </ul>
@@ -86,6 +126,15 @@ export default function UsersDirectory({ currentUserId, headerAction }: UsersDir
           message="Delete this user? This removes them from every household and revokes their access."
           onConfirm={handleConfirmDelete}
           onCancel={() => setPendingDeleteId(null)}
+        />
+      )}
+
+      {pendingPromoteId != null && (
+        <ConfirmDialog
+          message="Make this user an admin? They will gain full admin access across every household."
+          confirmLabel="Promote"
+          onConfirm={handleConfirmPromote}
+          onCancel={() => setPendingPromoteId(null)}
         />
       )}
     </div>

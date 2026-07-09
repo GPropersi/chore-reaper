@@ -115,12 +115,9 @@ type LayoutContext = {
 
 type LayoutProps = {
   isAdmin: boolean;
-  memberships: Membership[];
-  currentHouseholdId: number | undefined;
-  onSwitchHousehold: (householdId: number) => void;
 };
 
-function Layout({ isAdmin, memberships, currentHouseholdId, onSwitchHousehold }: LayoutProps) {
+function Layout({ isAdmin }: LayoutProps) {
   const { rooms, setRooms } = useRooms();
   const [selectedRoom, setSelectedRoom] = useState('all');
   const navigate = useNavigate();
@@ -135,15 +132,7 @@ function Layout({ isAdmin, memberships, currentHouseholdId, onSwitchHousehold }:
 
   return (
     <div>
-      <NavBar
-        rooms={rooms}
-        selectedRoom={selectedRoom}
-        onSelect={handleSelectRoom}
-        isAdmin={isAdmin}
-        memberships={memberships}
-        currentHouseholdId={currentHouseholdId}
-        onSwitchHousehold={onSwitchHousehold}
-      />
+      <NavBar rooms={rooms} selectedRoom={selectedRoom} onSelect={handleSelectRoom} isAdmin={isAdmin} />
       <Outlet context={{ selectedRoom, rooms, onRoomsChange: setRooms } satisfies LayoutContext} />
     </div>
   );
@@ -211,9 +200,6 @@ function App() {
               // invalidation.
               key={me?.currentHouseholdId}
               isAdmin={me?.isAdmin ?? false}
-              memberships={me?.memberships ?? []}
-              currentHouseholdId={me?.currentHouseholdId}
-              onSwitchHousehold={switchHousehold}
             />
           }
         >

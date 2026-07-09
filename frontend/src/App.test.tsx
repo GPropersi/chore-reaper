@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, cleanup, screen } from '@testing-library/react';
+import { render, cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from './App';
 import { useMidnightClock } from './hooks/useMidnightClock';
@@ -306,21 +306,23 @@ describe('App', () => {
             });
           }
           if (url === '/api/rooms') return jsonResponse(roomsResponse);
+          if (url === '/api/members') return jsonResponse({ success: true, data: [] });
+          if (url === '/api/admin/users') return jsonResponse({ success: true, data: [] });
+          if (url === '/api/admin/join-requests') return jsonResponse({ success: true, data: [] });
+          if (url === '/api/admin/households') return jsonResponse({ success: true, data: [] });
           throw new Error(`Unhandled fetch: ${url}`);
         }),
       );
       return calls;
     }
 
-    it('renders a household switcher only when the user has more than one membership', async () => {
-      stubMultiHouseholdFetch();
-
-      render(<App />);
-
-      expect(await screen.findByLabelText('Household')).toBeInTheDocument();
-    });
-
-    it('switching households sends the new X-Household-Id header and swaps the chore list to the other household', async () => {
+    // The switcher itself (and this coverage of it) lives on the Household
+    // admin page now, not the NavBar — see HouseholdSection.test.tsx for the
+    // single-membership-hides-it / opens-modal-and-selects unit coverage.
+    // This test is the one place that proves the whole wiring end to end:
+    // App → AdminRoute → AdminPanel → HouseholdSection → SwitchHouseholdModal
+    // → switchHousehold → a real re-fetch with the new X-Household-Id header.
+    it('switching households on the Household admin page sends the new X-Household-Id header and swaps the chore list to the other household', async () => {
       const user = userEvent.setup();
       stubMultiHouseholdFetch();
 
@@ -328,7 +330,12 @@ describe('App', () => {
 
       await screen.findByText('Household A Chore');
 
-      await user.selectOptions(screen.getByLabelText('Household'), 'Household B');
+      await user.click(await screen.findByTestId('admin-nav-link'));
+      await user.click(await screen.findByRole('button', { name: 'Switch household' }));
+      const modal = screen.getByTestId('switch-household-modal-backdrop');
+      await user.click(within(modal).getByRole('button', { name: 'Household B' }));
+
+      await user.click(await screen.findByRole('button', { name: 'All' }));
 
       expect(await screen.findByText('Household B Chore')).toBeInTheDocument();
       expect(screen.queryByText('Household A Chore')).not.toBeInTheDocument();

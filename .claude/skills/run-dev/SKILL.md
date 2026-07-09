@@ -11,7 +11,10 @@ different conversation, can still find and kill it.** State lives in `.claude/ru
 `dev.pid` (the top-level process PID) and `dev.log` (combined output).
 
 Repo root for all commands below: wherever `package.json`'s `workspaces` field lists `backend`/`frontend`
-(this repo's root). Resolve it with `git rev-parse --show-toplevel` if unsure.
+(this repo's root) — this is the Bash tool's default working directory for the whole session, so no `cd`
+is normally needed. If you ever land in a subdirectory and need to get back, run `git rev-parse
+--show-toplevel` as its own plain command (no `cd "$(...)"` — that shell-substitution shape always
+requires manual approval and can't be pre-approved) and `cd` to the literal path it prints.
 
 ## Prerequisites (check once, first run only)
 
@@ -29,12 +32,12 @@ If all three already exist, skip straight to Start/Stop.
 
 ## Start (default — no argument, or argument is not "stop")
 
-1. Check if it's already running:
+1. Check if it's already running. Read `.claude/run-dev/dev.pid` directly (Read tool, or a plain `cat
+   .claude/run-dev/dev.pid 2>/dev/null` — don't wrap it in `kill -0 "$(cat ...)"`, that inline
+   substitution shape always requires manual approval). If the file doesn't exist, it's not running. If it
+   does, take the literal PID value from the output and check it as its own plain command:
    ```bash
-   cd "$(git rev-parse --show-toplevel)"
-   if [ -f .claude/run-dev/dev.pid ] && kill -0 "$(cat .claude/run-dev/dev.pid)" 2>/dev/null; then
-     echo "already running"
-   fi
+   kill -0 <literal PID> 2>/dev/null && echo "already running" || echo "not running"
    ```
    If already running, just re-extract and report the URL from the existing log (last step below) —
    don't start a second copy.
@@ -42,16 +45,17 @@ If all three already exist, skip straight to Start/Stop.
 2. Otherwise, launch it detached and capture the real OS PID (not a Claude-session task ID — this must
    be killable from a fresh session too):
    ```bash
-   cd "$(git rev-parse --show-toplevel)"
    mkdir -p .claude/run-dev
    nohup npm run dev > .claude/run-dev/dev.log 2>&1 &
    echo $! > .claude/run-dev/dev.pid
    disown 2>/dev/null || true
    ```
 
-3. Poll the log (up to ~30s) until both the backend and frontend report ready:
+3. Poll the log (up to ~30s) until both the backend and frontend report ready. Use brace expansion
+   (`{1..30}`), not `$(seq 1 30)` — both loop 30 times, but brace expansion isn't command substitution so
+   it doesn't trip the manual-approval gate:
    ```bash
-   for i in $(seq 1 30); do
+   for i in {1..30}; do
      grep -q 'Ready on http' .claude/run-dev/dev.log 2>/dev/null && \
      grep -q 'Local:' .claude/run-dev/dev.log 2>/dev/null && break
      sleep 1
@@ -77,29 +81,27 @@ If all three already exist, skip straight to Start/Stop.
 
 Kill the whole process tree the pidfile points at — `npm run dev` → `concurrently` → three children
 (jwks node process, `wrangler dev`, `vite`). Killing only the top PID can leave those orphaned, so walk
-descendants first:
+descendants first.
 
-```bash
-cd "$(git rev-parse --show-toplevel)"
-if [ -f .claude/run-dev/dev.pid ]; then
-  PID=$(cat .claude/run-dev/dev.pid)
-  if kill -0 "$PID" 2>/dev/null; then
-    kill_tree() {
-      local p=$1
-      for c in $(pgrep -P "$p" 2>/dev/null); do kill_tree "$c"; done
-      kill "$p" 2>/dev/null
-    }
-    kill_tree "$PID"
-    sleep 1
-    echo "stopped"
-  else
-    echo "pidfile was stale — process already gone"
-  fi
-  rm -f .claude/run-dev/dev.pid
-else
-  echo "not running"
-fi
-```
+All of `npm run dev`'s descendants (`concurrently` → jwks/wrangler/vite → wrangler-cli → esbuild/workerd)
+stay in one OS process group — confirmed empirically (2026-07-09): killing the *process group* the
+pidfile's PID belongs to takes down every descendant in one shot, no recursive `pgrep` walk needed. This
+also means the whole thing stays substitution-free — every step below is a plain command, reading the
+previous step's plain-text output and splicing the literal value into the next call.
+
+1. Read `.claude/run-dev/dev.pid` directly (Read tool, or plain `cat .claude/run-dev/dev.pid
+   2>/dev/null`) to get the literal PID. If the file doesn't exist, report "not running" and stop here.
+2. `kill -0 <literal PID> 2>/dev/null` — if this fails (non-zero exit), the pidfile was stale: report
+   "pidfile was stale — process already gone", `rm -f .claude/run-dev/dev.pid`, and stop here.
+3. `ps -o pgid= -p <literal PID>` — prints the process group ID as plain text. Take that literal number.
+4. Kill the whole group and clean up:
+   ```bash
+   kill -TERM -- -<literal PGID> 2>/dev/null
+   sleep 1
+   kill -KILL -- -<literal PGID> 2>/dev/null || true
+   rm -f .claude/run-dev/dev.pid
+   echo "stopped"
+   ```
 
 Confirm the ports are actually free afterward (`lsof -i :8790 -i :8787 -sTCP:LISTEN -P` should be empty;
 the frontend port varies, don't bother checking it) and report the result to the user in one line —

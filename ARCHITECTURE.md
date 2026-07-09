@@ -159,6 +159,12 @@ scripts/           Root-level scripts (git hooks installer)
     symmetrical counterpart to the grant flow below — same never-blocks-the-D1-write contract. Frontend:
     `AdminPanel.tsx` → `UsersDirectory.tsx`, gated behind a confirm dialog, with the delete action hidden
     on the caller's own row.
+  - `POST /api/admin/users/:id/promote` — grants global admin (`users.is_admin = 1`) to an existing user.
+    One-way: there's no demote route. Backed by `promoteUserToAdmin` in `admin-users.ts`, returns the
+    updated `AdminUserWire`. 404s for an unknown id. Deliberately separate from
+    `household_members.role` (see below) — this only ever touches `users.is_admin`. Frontend:
+    `AdminPanel.tsx` → `UsersDirectory.tsx`, a "Promote" button shown only on non-admin rows, gated
+    behind a confirm dialog.
 - **Join requests**: a non-admin member adding an email with no existing account gets rejected
   (`new_user_requires_admin`, 403) by `POST /api/members`, same as before — but the frontend now offers an
   escalation path (`AddMemberModal.tsx`'s "Ask an admin to add this person" button) that calls

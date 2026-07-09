@@ -4,6 +4,7 @@ import app from '../../src/app.js';
 import { signTestJwt } from '../helpers/sign-test-jwt.js';
 import { stubAccessJwks, testEnv, TEST_ACCESS_AUD, TEST_JWKS_URL } from '../helpers/access-test-env.js';
 import { seedHouseholdMember, seedAdditionalMembership } from '../helpers/seed.js';
+import { cleanupProtectedOwnerRow } from '../helpers/protected-owner.js';
 import primaryJwks from '../fixtures/test-jwks.json' with { type: 'json' };
 
 const ACCESS_ALLOWLIST_ENV = {
@@ -175,6 +176,29 @@ describe('DELETE /api/admin/users/:id', () => {
     expect(res.status).toBe(404);
   });
 
+  it('returns 403 when another admin targets the protected owner account, and leaves it in place', async () => {
+    await seedHouseholdMember({ id: 1, householdId: 1, email: 'admin@example.com', isAdmin: true });
+    await seedHouseholdMember({ id: 2, householdId: 1, email: 'giovannigp@gmail.com', isAdmin: true });
+
+    try {
+      const res = await app.request(
+        '/api/admin/users/2',
+        { method: 'DELETE', headers: await authHeader('admin@example.com') },
+        testEnv(),
+      );
+      expect(res.status).toBe(403);
+
+      const stillThere = await env.DB.prepare('SELECT id FROM users WHERE id = 2').first();
+      expect(stillThere).not.toBeNull();
+    } finally {
+      // This row is (correctly) never deletable through the app, so it
+      // would otherwise survive into every other test file's own blanket
+      // `DELETE FROM users` reset — see cleanupProtectedOwnerRow's own
+      // comment for why.
+      await cleanupProtectedOwnerRow(env.DB, 2);
+    }
+  });
+
   it('deletes the user and their memberships across every household', async () => {
     await seedHouseholdMember({ id: 1, householdId: 1, email: 'admin@example.com', isAdmin: true });
     await seedHouseholdMember({ id: 2, householdId: 1, email: 'member@example.com' });
@@ -281,5 +305,74 @@ describe('DELETE /api/admin/users/:id', () => {
 
     const userRow = await env.DB.prepare('SELECT id FROM users WHERE id = 2').first();
     expect(userRow).toBeNull();
+  });
+});
+
+describe('POST /api/admin/users/:id/promote', () => {
+  it('returns 403 for a non-admin', async () => {
+    await seedHouseholdMember({ id: 1, householdId: 1, email: 'admin@example.com', isAdmin: true });
+    await seedHouseholdMember({ id: 2, householdId: 1, email: 'member@example.com' });
+
+    const res = await app.request(
+      '/api/admin/users/2/promote',
+      { method: 'POST', headers: await authHeader('member@example.com') },
+      testEnv(),
+    );
+    expect(res.status).toBe(403);
+
+    const stillMember = await env.DB.prepare('SELECT is_admin FROM users WHERE id = 2').first<{
+      is_admin: number;
+    }>();
+    expect(stillMember?.is_admin).toBe(0);
+  });
+
+  it('returns 404 for an unknown id', async () => {
+    await seedHouseholdMember({ id: 1, householdId: 1, email: 'admin@example.com', isAdmin: true });
+
+    const res = await app.request(
+      '/api/admin/users/999/promote',
+      { method: 'POST', headers: await authHeader('admin@example.com') },
+      testEnv(),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it('grants global admin and returns the updated user', async () => {
+    await seedHouseholdMember({ id: 1, householdId: 1, email: 'admin@example.com', isAdmin: true });
+    await seedHouseholdMember({ id: 2, householdId: 1, email: 'member@example.com' });
+    await seedAdditionalMembership(2, 2);
+
+    const res = await app.request(
+      '/api/admin/users/2/promote',
+      { method: 'POST', headers: await authHeader('admin@example.com') },
+      testEnv(),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      data: { id: number; email: string; isAdmin: boolean; households: { id: number }[] };
+    };
+    expect(body.data).toMatchObject({ id: 2, email: 'member@example.com', isAdmin: true });
+    expect(body.data.households.map((h) => h.id).sort()).toEqual([1, 2]);
+
+    const userRow = await env.DB.prepare('SELECT is_admin FROM users WHERE id = 2').first<{
+      is_admin: number;
+    }>();
+    expect(userRow?.is_admin).toBe(1);
+  });
+
+  it('does not touch household_members.role', async () => {
+    await seedHouseholdMember({ id: 1, householdId: 1, email: 'admin@example.com', isAdmin: true });
+    await seedHouseholdMember({ id: 2, householdId: 1, email: 'member@example.com' });
+
+    await app.request(
+      '/api/admin/users/2/promote',
+      { method: 'POST', headers: await authHeader('admin@example.com') },
+      testEnv(),
+    );
+
+    const membership = await env.DB.prepare(
+      'SELECT role FROM household_members WHERE user_id = 2 AND household_id = 1',
+    ).first<{ role: string }>();
+    expect(membership?.role).toBe('member');
   });
 });

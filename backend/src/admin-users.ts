@@ -15,20 +15,9 @@ type Row = {
   household_name: string | null;
 };
 
-export async function getAllUsersWithHouseholds(db: D1Database): Promise<AdminUserWire[]> {
-  const result = await db
-    .prepare(
-      `SELECT u.id AS user_id, u.email AS email, u.timezone AS timezone, u.is_admin AS is_admin,
-              h.id AS household_id, h.name AS household_name
-       FROM users u
-       LEFT JOIN household_members hm ON hm.user_id = u.id
-       LEFT JOIN households h ON h.id = hm.household_id
-       ORDER BY u.email, h.name`,
-    )
-    .all<Row>();
-
+function rowsToUsers(rows: Row[]): AdminUserWire[] {
   const byId = new Map<number, AdminUserWire>();
-  for (const row of result.results) {
+  for (const row of rows) {
     let user = byId.get(row.user_id);
     if (!user) {
       user = {
@@ -47,7 +36,57 @@ export async function getAllUsersWithHouseholds(db: D1Database): Promise<AdminUs
   return Array.from(byId.values());
 }
 
-export type DeleteUserResult = { status: 'deleted'; email: string } | { status: 'not_found' };
+export async function getAllUsersWithHouseholds(db: D1Database): Promise<AdminUserWire[]> {
+  const result = await db
+    .prepare(
+      `SELECT u.id AS user_id, u.email AS email, u.timezone AS timezone, u.is_admin AS is_admin,
+              h.id AS household_id, h.name AS household_name
+       FROM users u
+       LEFT JOIN household_members hm ON hm.user_id = u.id
+       LEFT JOIN households h ON h.id = hm.household_id
+       ORDER BY u.email, h.name`,
+    )
+    .all<Row>();
+
+  return rowsToUsers(result.results);
+}
+
+export type PromoteUserResult = { status: 'promoted'; user: AdminUserWire } | { status: 'not_found' };
+
+// One-way: grants global admin, never revokes it — there's no in-app demote
+// action, only the household member/user list this promotes from.
+export async function promoteUserToAdmin(db: D1Database, userId: number): Promise<PromoteUserResult> {
+  await db.prepare('UPDATE users SET is_admin = 1 WHERE id = ?').bind(userId).run();
+
+  const result = await db
+    .prepare(
+      `SELECT u.id AS user_id, u.email AS email, u.timezone AS timezone, u.is_admin AS is_admin,
+              h.id AS household_id, h.name AS household_name
+       FROM users u
+       LEFT JOIN household_members hm ON hm.user_id = u.id
+       LEFT JOIN households h ON h.id = hm.household_id
+       WHERE u.id = ?
+       ORDER BY h.name`,
+    )
+    .bind(userId)
+    .all<Row>();
+
+  const [user] = rowsToUsers(result.results);
+  if (!user) {
+    return { status: 'not_found' };
+  }
+  return { status: 'promoted', user };
+}
+
+export type DeleteUserResult =
+  { status: 'deleted'; email: string } | { status: 'not_found' } | { status: 'protected' };
+
+// The app owner's account — never deletable, by anyone, through any path.
+// Also enforced at the database layer by the prevent_owner_account_deletion
+// trigger (migration 0009), so this check exists purely to surface a
+// friendly 403 instead of a raw SQL error; the trigger is what makes the
+// delete actually impossible.
+const PROTECTED_OWNER_EMAIL = 'giovannigp@gmail.com';
 
 // Cascades a user delete across every table with a live FK to users(id) —
 // D1 enforces foreign keys, so these have to run in this order (see the
@@ -63,6 +102,9 @@ export async function deleteUser(db: D1Database, userId: number): Promise<Delete
   }>();
   if (!user) {
     return { status: 'not_found' };
+  }
+  if (user.email === PROTECTED_OWNER_EMAIL) {
+    return { status: 'protected' };
   }
 
   await db.batch([
