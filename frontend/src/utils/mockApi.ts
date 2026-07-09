@@ -35,6 +35,21 @@ type MockRoom = {
   name: string;
 };
 
+type MockHousehold = {
+  id: number;
+  name: string;
+};
+
+type MockJoinRequest = {
+  id: number;
+  householdId: number;
+  householdName: string;
+  requestedEmail: string;
+  requestedByEmail: string;
+  status: 'pending' | 'approved' | 'denied';
+  createdAt: string;
+};
+
 function seedMe() {
   return {
     id: 1,
@@ -104,22 +119,49 @@ function seedMembers(): MockMember[] {
   ];
 }
 
+function seedHouseholds(): MockHousehold[] {
+  return [
+    { id: 1, name: 'Preview Household' },
+    { id: 2, name: 'Preview Household B' },
+  ];
+}
+
+function seedJoinRequests(): MockJoinRequest[] {
+  return [
+    {
+      id: 1,
+      householdId: 1,
+      householdName: 'Preview Household',
+      requestedEmail: 'newcomer@example.com',
+      requestedByEmail: 'roommate@example.com',
+      status: 'pending',
+      createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+    },
+  ];
+}
+
 let chores: ChoreWire[] = seedChores();
 let members: MockMember[] = seedMembers();
 let rooms: MockRoom[] = seedRooms();
+let households: MockHousehold[] = seedHouseholds();
+let joinRequests: MockJoinRequest[] = seedJoinRequests();
 let me = seedMe();
 let nextChoreId = 4;
 let nextMemberId = 3;
 let nextRoomId = 4;
+let nextJoinRequestId = 2;
 
 export function resetMockData(): void {
   chores = seedChores();
   members = seedMembers();
   rooms = seedRooms();
+  households = seedHouseholds();
+  joinRequests = seedJoinRequests();
   me = seedMe();
   nextChoreId = 4;
   nextMemberId = 3;
   nextRoomId = 4;
+  nextJoinRequestId = 2;
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -136,6 +178,8 @@ const CHORE_COMPLETE_RE = /^\/api\/chores\/(\d+)\/complete$/;
 const MEMBER_ID_RE = /^\/api\/members\/(\d+)$/;
 const ROOM_ID_RE = /^\/api\/rooms\/(\d+)$/;
 const HOUSEHOLD_ID_RE = /^\/api\/households\/(\d+)$/;
+const JOIN_REQUEST_APPROVE_RE = /^\/api\/admin\/join-requests\/(\d+)\/approve$/;
+const JOIN_REQUEST_DENY_RE = /^\/api\/admin\/join-requests\/(\d+)\/deny$/;
 
 export async function mockFetch(path: string, init?: RequestInit): Promise<Response> {
   const method = (init?.method ?? 'GET').toUpperCase();
@@ -219,6 +263,67 @@ export async function mockFetch(path: string, init?: RequestInit): Promise<Respo
     const id = Number(memberIdMatch[1]);
     if (!members.some((m) => m.id === id)) return jsonResponse({ success: false, error: 'not found' }, 404);
     members = members.filter((m) => m.id !== id);
+    return jsonResponse({ success: true, data: null });
+  }
+
+  if (path === '/api/members/requests' && method === 'POST') {
+    const body = parseBody(init);
+    const email = String(body.email ?? '');
+    const request: MockJoinRequest = {
+      id: nextJoinRequestId++,
+      householdId: 1,
+      householdName: households.find((h) => h.id === 1)?.name ?? 'Preview Household',
+      requestedEmail: email,
+      requestedByEmail: me.email,
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    };
+    joinRequests = [...joinRequests, request];
+    return jsonResponse({ success: true, data: request }, 201);
+  }
+
+  if (path === '/api/admin/households' && method === 'GET') {
+    return jsonResponse({ success: true, data: households });
+  }
+  if (path === '/api/admin/members' && method === 'POST') {
+    const body = parseBody(init);
+    const householdId = Number(body.householdId);
+    const member = {
+      timezone: null,
+      ...body,
+      householdId,
+      isAdmin: body.makeAdmin === true,
+      id: nextMemberId++,
+    } as MockMember;
+    if (householdId === 1) members = [...members, member];
+    return jsonResponse({ success: true, data: member }, 201);
+  }
+
+  if (path === '/api/admin/join-requests' && method === 'GET') {
+    return jsonResponse({ success: true, data: joinRequests.filter((r) => r.status === 'pending') });
+  }
+  const approveMatch = path.match(JOIN_REQUEST_APPROVE_RE);
+  if (approveMatch && method === 'POST') {
+    const id = Number(approveMatch[1]);
+    const request = joinRequests.find((r) => r.id === id);
+    if (!request) return jsonResponse({ success: false, error: 'not found' }, 404);
+    joinRequests = joinRequests.map((r) => (r.id === id ? { ...r, status: 'approved' } : r));
+    const member: MockMember = {
+      id: nextMemberId++,
+      householdId: request.householdId,
+      email: request.requestedEmail,
+      isAdmin: false,
+      timezone: null,
+    };
+    if (request.householdId === 1) members = [...members, member];
+    return jsonResponse({ success: true, data: member });
+  }
+  const denyMatch = path.match(JOIN_REQUEST_DENY_RE);
+  if (denyMatch && method === 'POST') {
+    const id = Number(denyMatch[1]);
+    if (!joinRequests.some((r) => r.id === id))
+      return jsonResponse({ success: false, error: 'not found' }, 404);
+    joinRequests = joinRequests.map((r) => (r.id === id ? { ...r, status: 'denied' } : r));
     return jsonResponse({ success: true, data: null });
   }
 

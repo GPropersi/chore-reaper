@@ -58,6 +58,7 @@ async function authHeader(email: string) {
 beforeEach(async () => {
   stubAccessJwks();
   await env.DB.exec('DELETE FROM chores');
+  await env.DB.exec('DELETE FROM join_requests');
   await env.DB.exec('DELETE FROM household_members');
   await env.DB.exec('DELETE FROM users');
   await env.DB.exec('DELETE FROM households');
@@ -269,6 +270,73 @@ describe('POST /api/members', () => {
     );
     const listBody = (await listRes.json()) as { data: { email: string }[] };
     expect(listBody.data.map((u) => u.email)).toContain('gracefail@example.com');
+  });
+});
+
+describe('POST /api/members/requests', () => {
+  it('returns 400 when email is missing', async () => {
+    const res = await app.request(
+      '/api/members/requests',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await authHeader('member-a@example.com')) },
+        body: JSON.stringify({}),
+      },
+      testEnv(),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('creates a pending request for a non-admin adding a brand-new email', async () => {
+    const res = await app.request(
+      '/api/members/requests',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await authHeader('member-a@example.com')) },
+        body: JSON.stringify({ email: 'new@example.com' }),
+      },
+      testEnv(),
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as {
+      data: { requestedEmail: string; householdId: number; status: string };
+    };
+    expect(body.data).toMatchObject({ requestedEmail: 'new@example.com', householdId: 1, status: 'pending' });
+  });
+
+  it('returns 409 when the email already has an account', async () => {
+    const res = await app.request(
+      '/api/members/requests',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await authHeader('member-a@example.com')) },
+        body: JSON.stringify({ email: 'admin-a@example.com' }),
+      },
+      testEnv(),
+    );
+    expect(res.status).toBe(409);
+  });
+
+  it('returns 409 for a duplicate pending request', async () => {
+    await app.request(
+      '/api/members/requests',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await authHeader('member-a@example.com')) },
+        body: JSON.stringify({ email: 'new@example.com' }),
+      },
+      testEnv(),
+    );
+    const res = await app.request(
+      '/api/members/requests',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await authHeader('member-a@example.com')) },
+        body: JSON.stringify({ email: 'new@example.com' }),
+      },
+      testEnv(),
+    );
+    expect(res.status).toBe(409);
   });
 });
 

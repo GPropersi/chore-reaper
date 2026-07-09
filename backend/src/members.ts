@@ -118,6 +118,95 @@ export async function addHouseholdMember(
   };
 }
 
+export type AdminMemberInput = {
+  email: string;
+  timezone?: string | null;
+  makeAdmin?: boolean;
+};
+
+export type AdminAddHouseholdMemberResult =
+  | { status: 'created'; member: MemberWire }
+  | { status: 'added_existing'; member: MemberWire }
+  | { status: 'already_member' }
+  | { status: 'household_not_found' };
+
+// Admin-only counterpart to addHouseholdMember: the caller supplies an
+// arbitrary target household (not their own session's), so — unlike
+// addHouseholdMember, where householdId always comes from the caller's own
+// verified membership — this has to validate that household actually exists.
+// No callerIsAdmin gate: this is only ever reached via requireGlobalAdmin.
+export async function adminAddHouseholdMember(
+  db: D1Database,
+  householdId: number,
+  input: AdminMemberInput,
+  invitedBy: number,
+): Promise<AdminAddHouseholdMemberResult> {
+  const household = await db.prepare('SELECT id FROM households WHERE id = ?').bind(householdId).first<{
+    id: number;
+  }>();
+  if (!household) {
+    return { status: 'household_not_found' };
+  }
+
+  const email = input.email.trim().toLowerCase();
+
+  const existing = await db
+    .prepare('SELECT id, email, timezone, is_admin FROM users WHERE email = ?')
+    .bind(email)
+    .first<{ id: number; email: string; timezone: string | null; is_admin: number }>();
+
+  if (existing) {
+    // makeAdmin has no effect here — this person already has an account, and
+    // this endpoint only grants admin at account-creation time, same as
+    // addHouseholdMember never promotes an existing account either.
+    const existingMembership = await db
+      .prepare('SELECT id FROM household_members WHERE user_id = ? AND household_id = ?')
+      .bind(existing.id, householdId)
+      .first<{ id: number }>();
+    if (existingMembership) {
+      return { status: 'already_member' };
+    }
+
+    await db
+      .prepare('INSERT INTO household_members (user_id, household_id, invited_by) VALUES (?, ?, ?)')
+      .bind(existing.id, householdId, invitedBy)
+      .run();
+
+    return {
+      status: 'added_existing',
+      member: {
+        id: existing.id,
+        householdId,
+        email: existing.email,
+        isAdmin: existing.is_admin === 1,
+        timezone: existing.timezone,
+      },
+    };
+  }
+
+  const isAdmin = input.makeAdmin ?? false;
+  const result = await db
+    .prepare('INSERT INTO users (email, timezone, is_admin) VALUES (?, ?, ?)')
+    .bind(email, input.timezone ?? null, isAdmin ? 1 : 0)
+    .run();
+  const newUserId = result.meta.last_row_id;
+
+  await db
+    .prepare('INSERT INTO household_members (user_id, household_id, invited_by) VALUES (?, ?, ?)')
+    .bind(newUserId, householdId, invitedBy)
+    .run();
+
+  const row = await db
+    .prepare('SELECT id, email, timezone FROM users WHERE id = ?')
+    .bind(newUserId)
+    .first<{ id: number; email: string; timezone: string | null }>();
+
+  return {
+    status: 'created',
+    member: { id: row!.id, householdId, email: row!.email, isAdmin, timezone: row!.timezone },
+  };
+}
+
 export async function removeHouseholdMember(
   db: D1Database,
   householdId: number,

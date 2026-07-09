@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import type { ApiResponse } from '../../../types/SharedTypes.js';
 import { getMembersByHousehold, addHouseholdMember, removeHouseholdMember } from '../members.js';
-import { grantAccessListEntry } from '../access-allowlist.js';
+import { createJoinRequest } from '../join-requests.js';
+import { grantAccessAndDescribeWarning } from '../access-allowlist.js';
 import type { AppEnv } from '../types.js';
 
 const members = new Hono<AppEnv>();
@@ -52,36 +53,47 @@ members.post('/', async (c) => {
 
   const data = result.member;
 
-  // The D1 write above is authoritative and is never rolled back over an
-  // Access-API problem — a failed auto-grant just degrades to the same
-  // manual fallback ("add them in the dashboard") that existed before this
-  // feature, which is better than failing member-creation over a transient
-  // Cloudflare API hiccup. This function is designed to never throw, but the
-  // try/catch is defense-in-depth so a bug in it can never fail this request.
-  let warning: string | undefined;
-  try {
-    const grant = await grantAccessListEntry(c.env, data.email);
-    if (grant.status === 'failed') {
-      warning = `Member added, but could not be added to the Cloudflare Access allow-list automatically (${grant.reason}). Add ${data.email} manually in the Zero Trust dashboard.`;
-    }
-    console.log(
-      JSON.stringify({
-        event: grant.status === 'failed' ? 'access-grant-failed' : 'access-grant',
-        email: data.email,
-        householdId: c.var.householdId,
-        actor: c.var.verifiedEmail,
-        ...('reason' in grant ? { reason: grant.reason } : {}),
-      }),
-    );
-  } catch (err) {
-    warning = `Member added, but could not be added to the Cloudflare Access allow-list automatically. Add ${data.email} manually in the Zero Trust dashboard.`;
-    console.log(JSON.stringify({ event: 'access-grant-threw', email: data.email, error: String(err) }));
-  }
+  const warning = await grantAccessAndDescribeWarning(c.env, data.email, {
+    householdId: c.var.householdId,
+    actor: c.var.verifiedEmail,
+  });
 
   return c.json(
     { success: true, data, ...(warning ? { warning } : {}) } satisfies ApiResponse<typeof data>,
     201,
   );
+});
+
+// Escalation path for the new_user_requires_admin case above: a non-admin
+// member can't add a brand-new account directly, but can ask an admin to.
+// householdId is sourced from the caller's own session, same invariant as
+// every other member-scoped write in this file.
+members.post('/requests', async (c) => {
+  const body = await c.req.json<Record<string, unknown>>();
+  if (!body.email) {
+    return c.json({ success: false, error: 'Missing required fields' } satisfies ApiResponse<never>, 400);
+  }
+
+  const result = await createJoinRequest(c.env.DB, c.var.householdId, String(body.email), c.var.userId);
+
+  if (result.status === 'already_registered') {
+    return c.json(
+      {
+        success: false,
+        error: 'This person already has an account — add them directly instead.',
+      } satisfies ApiResponse<never>,
+      409,
+    );
+  }
+
+  if (result.status === 'duplicate') {
+    return c.json(
+      { success: false, error: 'A request for this email is already pending.' } satisfies ApiResponse<never>,
+      409,
+    );
+  }
+
+  return c.json({ success: true, data: result.request } satisfies ApiResponse<typeof result.request>, 201);
 });
 
 members.delete('/:id', async (c) => {

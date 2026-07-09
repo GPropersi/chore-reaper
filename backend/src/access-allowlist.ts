@@ -69,3 +69,31 @@ export async function grantAccessListEntry(env: AccessEnv, rawEmail: string): Pr
 
   return { status: 'granted' };
 }
+
+// Shared by every route that creates/adds a member and needs to best-effort
+// grant Cloudflare Access — the D1 write is always authoritative and never
+// rolled back over an Access-API problem; a failure just degrades to the
+// same manual fallback ("add them in the dashboard") that existed before
+// auto-granting did. Designed to never throw, but callers get a plain string
+// back regardless of whether grantAccessListEntry itself threw, so a bug in
+// it can never fail the request.
+export async function grantAccessAndDescribeWarning(
+  env: AccessEnv,
+  email: string,
+  logContext: Record<string, unknown>,
+): Promise<string | undefined> {
+  try {
+    const grant = await grantAccessListEntry(env, email);
+    if (grant.status === 'failed') {
+      console.log(
+        JSON.stringify({ event: 'access-grant-failed', email, reason: grant.reason, ...logContext }),
+      );
+      return `Member added, but could not be added to the Cloudflare Access allow-list automatically (${grant.reason}). Add ${email} manually in the Zero Trust dashboard.`;
+    }
+    console.log(JSON.stringify({ event: 'access-grant', email, ...logContext }));
+    return undefined;
+  } catch (err) {
+    console.log(JSON.stringify({ event: 'access-grant-threw', email, error: String(err), ...logContext }));
+    return `Member added, but could not be added to the Cloudflare Access allow-list automatically. Add ${email} manually in the Zero Trust dashboard.`;
+  }
+}

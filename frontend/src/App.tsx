@@ -167,10 +167,12 @@ function AdminRoute({
   me,
   currentMembership,
   onHouseholdTimezoneChange,
+  onSwitchHousehold,
 }: {
   me: Me | null;
   currentMembership: Membership | undefined;
   onHouseholdTimezoneChange: (timezone: string) => void;
+  onSwitchHousehold: (householdId: number) => void;
 }) {
   const { rooms, onRoomsChange } = useOutletContext<LayoutContext>();
   if (!me || !currentMembership) return null;
@@ -179,9 +181,13 @@ function AdminRoute({
       rooms={rooms}
       onRoomsChange={onRoomsChange}
       householdId={currentMembership.householdId}
+      householdName={currentMembership.householdName}
       householdTimezone={currentMembership.householdTimezone}
       onHouseholdTimezoneChange={onHouseholdTimezoneChange}
       isAdmin={me.isAdmin}
+      memberships={me.memberships}
+      currentHouseholdId={me.currentHouseholdId}
+      onSwitchHousehold={onSwitchHousehold}
     />
   );
 }
@@ -218,6 +224,7 @@ function App() {
                 me={me}
                 currentMembership={currentMembership}
                 onHouseholdTimezoneChange={updateHouseholdTimezone}
+                onSwitchHousehold={switchHousehold}
               />
             }
           />

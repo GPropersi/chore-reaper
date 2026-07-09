@@ -38,3 +38,18 @@ export interface AdminUser {
   isAdmin: boolean;
   households: AdminUserHousehold[];
 }
+
+export interface HouseholdListItem {
+  id: number;
+  name: string;
+}
+
+export interface JoinRequest {
+  id: number;
+  householdId: number;
+  householdName: string;
+  requestedEmail: string;
+  requestedByEmail: string;
+  status: 'pending' | 'approved' | 'denied';
+  createdAt: string;
+}

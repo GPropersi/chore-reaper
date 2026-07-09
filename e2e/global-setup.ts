@@ -15,7 +15,7 @@ export default function globalSetup() {
     'DB',
     '--local',
     '--command',
-    'DELETE FROM chores; DELETE FROM rooms; DELETE FROM household_members; DELETE FROM users; DELETE FROM households;',
+    'DELETE FROM chores; DELETE FROM rooms; DELETE FROM join_requests; DELETE FROM household_members; DELETE FROM users; DELETE FROM households;',
   ]);
   wrangler([
     'd1',
@@ -24,6 +24,9 @@ export default function globalSetup() {
     '--local',
     '--command',
     "INSERT INTO households (id, name, timezone) VALUES (1, 'E2E Household', 'UTC'); " +
+      // Zero members on purpose — lets an admin cross-household add-user test
+      // target somewhere other than their own current household.
+      "INSERT INTO households (id, name, timezone) VALUES (2, 'E2E Household B', 'UTC'); " +
       "INSERT INTO users (id, email, timezone, is_admin) VALUES (1, 'admin-e2e@example.com', 'America/Los_Angeles', 1); " +
       "INSERT INTO users (id, email, timezone, is_admin) VALUES (2, 'member-e2e@example.com', 'Europe/London', 0); " +
       'INSERT INTO household_members (user_id, household_id) VALUES (1, 1); ' +

@@ -11,9 +11,20 @@ export type AddMemberInput = {
 type AddMemberModalProps = {
   onSubmit: (input: AddMemberInput) => void;
   onCancel: () => void;
+  error?: string | null;
+  canRequestJoin?: boolean;
+  onRequestJoin?: (email: string) => void;
+  requestSubmitted?: boolean;
 };
 
-export default function AddMemberModal({ onSubmit, onCancel }: AddMemberModalProps) {
+export default function AddMemberModal({
+  onSubmit,
+  onCancel,
+  error,
+  canRequestJoin = false,
+  onRequestJoin,
+  requestSubmitted = false,
+}: AddMemberModalProps) {
   const [email, setEmail] = useState('');
   const [timezone, setTimezone] = useState('');
 
@@ -36,6 +47,11 @@ export default function AddMemberModal({ onSubmit, onCancel }: AddMemberModalPro
     >
       <div className="bg-gray-800 rounded-xl p-6 w-full max-w-md overflow-y-auto max-h-[90dvh]">
         <h3 className="text-white font-semibold text-lg mb-4">Add Member</h3>
+        {error && (
+          <p className="text-red-400 text-sm mb-3" role="alert">
+            {error}
+          </p>
+        )}
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <FormField
             name="email"
@@ -63,6 +79,22 @@ export default function AddMemberModal({ onSubmit, onCancel }: AddMemberModalPro
             </button>
           </div>
         </form>
+
+        {requestSubmitted ? (
+          <p className="text-green-400 text-xs mt-3" role="status">
+            Request sent — an admin will review it.
+          </p>
+        ) : (
+          canRequestJoin && (
+            <button
+              type="button"
+              onClick={() => onRequestJoin?.(email)}
+              className="w-full mt-3 text-indigo-400 hover:text-indigo-300 text-sm underline"
+            >
+              Ask an admin to add this person
+            </button>
+          )
+        )}
       </div>
     </div>,
     document.body,
