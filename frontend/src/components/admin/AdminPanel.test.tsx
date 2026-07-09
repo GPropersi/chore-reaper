@@ -18,9 +18,13 @@ const noRoomsProps = {
   rooms: [],
   onRoomsChange: () => {},
   householdId: 1,
+  householdName: 'The Smith House',
   householdTimezone: 'America/Chicago',
   onHouseholdTimezoneChange: () => {},
   isAdmin: false,
+  memberships: [{ householdId: 1, householdName: 'The Smith House' }],
+  currentHouseholdId: 1,
+  onSwitchHousehold: () => {},
 };
 
 beforeEach(() => {
@@ -39,6 +43,12 @@ beforeEach(() => {
       }
       if (url.startsWith('/api/members/') && method === 'DELETE') {
         return jsonResponse({ success: true, data: null });
+      }
+      if (url === '/api/admin/join-requests' && method === 'GET') {
+        return jsonResponse({ success: true, data: [] });
+      }
+      if (url === '/api/admin/users' && method === 'GET') {
+        return jsonResponse({ success: true, data: [] });
       }
       throw new Error(`Unhandled fetch: ${method} ${url}`);
     }),
@@ -172,6 +182,9 @@ describe('AdminPanel', () => {
             ],
           });
         }
+        if (url === '/api/admin/join-requests' && method === 'GET') {
+          return jsonResponse({ success: true, data: [] });
+        }
         throw new Error(`Unhandled fetch: ${method} ${url}`);
       }),
     );
@@ -188,5 +201,177 @@ describe('AdminPanel', () => {
     expect(screen.queryByRole('heading', { name: 'Users' })).not.toBeInTheDocument();
     const fetchMock = vi.mocked(fetch);
     expect(fetchMock.mock.calls.some(([input]) => input.toString() === '/api/admin/users')).toBe(false);
+  });
+
+  it('shows the Add User button only when isAdmin is true', async () => {
+    const { rerender } = render(<AdminPanel {...noRoomsProps} isAdmin={false} />);
+    await screen.findByText('admin@example.com');
+    expect(screen.queryByRole('button', { name: 'Add User' })).not.toBeInTheDocument();
+
+    rerender(<AdminPanel {...noRoomsProps} isAdmin={true} />);
+    expect(await screen.findByRole('button', { name: 'Add User' })).toBeInTheDocument();
+  });
+
+  it('renders the Add User button next to the Users heading, not the Members heading', async () => {
+    render(<AdminPanel {...noRoomsProps} isAdmin={true} />);
+    const usersHeading = await screen.findByRole('heading', { name: 'Users' });
+    const addUserButton = screen.getByRole('button', { name: 'Add User' });
+
+    expect(usersHeading.parentElement).toContainElement(addUserButton);
+    const membersHeading = screen.getByRole('heading', { name: 'Members' });
+    expect(membersHeading.parentElement).not.toContainElement(addUserButton);
+  });
+
+  it('submits the Add User form to POST /api/admin/members and appends to the list for the current household', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        const method = init?.method ?? 'GET';
+        if (url === '/api/members' && method === 'GET')
+          return jsonResponse({ success: true, data: initialMembers });
+        if (url === '/api/admin/join-requests' && method === 'GET')
+          return jsonResponse({ success: true, data: [] });
+        if (url === '/api/admin/users' && method === 'GET') return jsonResponse({ success: true, data: [] });
+        if (url === '/api/admin/households' && method === 'GET') {
+          return jsonResponse({
+            success: true,
+            data: [
+              { id: 1, name: 'The Smith House' },
+              { id: 2, name: 'The Jones House' },
+            ],
+          });
+        }
+        if (url === '/api/admin/members' && method === 'POST') {
+          const body = JSON.parse(init!.body as string);
+          return jsonResponse({ success: true, data: { id: 4, isAdmin: body.makeAdmin ?? false, ...body } });
+        }
+        throw new Error(`Unhandled fetch: ${method} ${url}`);
+      }),
+    );
+    const user = userEvent.setup();
+    render(<AdminPanel {...noRoomsProps} isAdmin={true} />);
+    await screen.findByText('admin@example.com');
+
+    await user.click(screen.getByRole('button', { name: 'Add User' }));
+    const modal = screen.getByTestId('add-user-modal-backdrop');
+    await user.type(within(modal).getByLabelText('Household'), 'Smith');
+    await user.click(await within(modal).findByRole('option', { name: 'The Smith House' }));
+    await user.type(within(modal).getByLabelText('Email'), 'new-user@example.com');
+    await user.click(within(modal).getByRole('button', { name: 'Save' }));
+
+    expect(await screen.findByText('new-user@example.com')).toBeInTheDocument();
+    const fetchMock = vi.mocked(fetch);
+    const postCall = fetchMock.mock.calls.find(
+      ([input, init]) => input.toString() === '/api/admin/members' && init?.method === 'POST',
+    );
+    expect(postCall).toBeDefined();
+    expect(JSON.parse(postCall![1]!.body as string)).toMatchObject({
+      householdId: 1,
+      email: 'new-user@example.com',
+    });
+  });
+
+  it('shows a confirmation naming the target household when Add User targets a different household', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        const method = init?.method ?? 'GET';
+        if (url === '/api/members' && method === 'GET')
+          return jsonResponse({ success: true, data: initialMembers });
+        if (url === '/api/admin/join-requests' && method === 'GET')
+          return jsonResponse({ success: true, data: [] });
+        if (url === '/api/admin/users' && method === 'GET') return jsonResponse({ success: true, data: [] });
+        if (url === '/api/admin/households' && method === 'GET') {
+          return jsonResponse({
+            success: true,
+            data: [
+              { id: 1, name: 'The Smith House' },
+              { id: 2, name: 'The Jones House' },
+            ],
+          });
+        }
+        if (url === '/api/admin/members' && method === 'POST') {
+          const body = JSON.parse(init!.body as string);
+          return jsonResponse({ success: true, data: { id: 4, isAdmin: false, ...body } });
+        }
+        throw new Error(`Unhandled fetch: ${method} ${url}`);
+      }),
+    );
+    const user = userEvent.setup();
+    render(
+      <AdminPanel
+        {...noRoomsProps}
+        isAdmin={true}
+        memberships={[
+          { householdId: 1, householdName: 'The Smith House' },
+          { householdId: 2, householdName: 'The Jones House' },
+        ]}
+      />,
+    );
+    await screen.findByText('admin@example.com');
+
+    await user.click(screen.getByRole('button', { name: 'Add User' }));
+    const modal = screen.getByTestId('add-user-modal-backdrop');
+    await user.type(within(modal).getByLabelText('Household'), 'Jones');
+    await user.click(await within(modal).findByRole('option', { name: 'The Jones House' }));
+    await user.type(within(modal).getByLabelText('Email'), 'other-house@example.com');
+    await user.click(within(modal).getByRole('button', { name: 'Save' }));
+
+    expect(await screen.findByText('Added other-house@example.com to The Jones House.')).toBeInTheDocument();
+    expect(screen.queryByText('other-house@example.com')).not.toBeInTheDocument();
+  });
+
+  it('requesting a join for a brand-new email posts to /api/members/requests and shows a confirmation', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        const method = init?.method ?? 'GET';
+        if (url === '/api/members' && method === 'GET')
+          return jsonResponse({ success: true, data: initialMembers });
+        if (url === '/api/members' && method === 'POST') {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                success: false,
+                error: "This person doesn't have an account yet — ask a household admin to add them.",
+              }),
+              { status: 403, headers: { 'content-type': 'application/json' } },
+            ),
+          );
+        }
+        if (url === '/api/members/requests' && method === 'POST') {
+          const body = JSON.parse(init!.body as string);
+          return jsonResponse({
+            success: true,
+            data: { id: 9, householdId: 1, requestedEmail: body.email, status: 'pending' },
+          });
+        }
+        throw new Error(`Unhandled fetch: ${method} ${url}`);
+      }),
+    );
+    const user = userEvent.setup();
+    render(<AdminPanel {...noRoomsProps} />);
+    await screen.findByText('admin@example.com');
+
+    await user.click(screen.getByRole('button', { name: 'Add Member' }));
+    const modal = screen.getByTestId('add-member-modal-backdrop');
+    await user.type(within(modal).getByLabelText('Email'), 'brand-new@example.com');
+    await user.click(within(modal).getByRole('button', { name: 'Save' }));
+
+    const requestButton = await within(modal).findByRole('button', {
+      name: 'Ask an admin to add this person',
+    });
+    await user.click(requestButton);
+
+    expect(await within(modal).findByText('Request sent — an admin will review it.')).toBeInTheDocument();
+    const fetchMock = vi.mocked(fetch);
+    const requestCall = fetchMock.mock.calls.find(
+      ([input, init]) => input.toString() === '/api/members/requests' && init?.method === 'POST',
+    );
+    expect(requestCall).toBeDefined();
+    expect(JSON.parse(requestCall![1]!.body as string)).toEqual({ email: 'brand-new@example.com' });
   });
 });

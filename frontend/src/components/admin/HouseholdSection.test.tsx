@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import HouseholdSection from './HouseholdSection';
 
@@ -13,6 +13,16 @@ afterEach(() => {
   vi.unstubAllGlobals();
   cleanup();
 });
+
+const baseProps = {
+  householdId: 1,
+  householdName: 'The Smith House',
+  householdTimezone: 'UTC',
+  onTimezoneChange: vi.fn(),
+  memberships: [{ householdId: 1, householdName: 'The Smith House' }],
+  currentHouseholdId: 1,
+  onSwitchHousehold: vi.fn(),
+};
 
 describe('HouseholdSection', () => {
   it('submits the selected timezone to PATCH /api/households/:id and reports it back on success', async () => {
@@ -28,7 +38,7 @@ describe('HouseholdSection', () => {
     vi.stubGlobal('fetch', fetchMock);
     const onTimezoneChange = vi.fn();
 
-    render(<HouseholdSection householdId={1} householdTimezone="UTC" onTimezoneChange={onTimezoneChange} />);
+    render(<HouseholdSection {...baseProps} onTimezoneChange={onTimezoneChange} />);
 
     await user.selectOptions(screen.getByLabelText('Timezone'), 'America/Chicago');
     await user.click(screen.getByRole('button', { name: 'Save' }));
@@ -47,11 +57,45 @@ describe('HouseholdSection', () => {
       vi.fn(() => jsonResponse({ success: false, error: 'Invalid timezone' }, 400)),
     );
 
-    render(<HouseholdSection householdId={1} householdTimezone="UTC" onTimezoneChange={vi.fn()} />);
+    render(<HouseholdSection {...baseProps} />);
 
     await user.click(screen.getByRole('button', { name: 'Save' }));
 
     expect(await screen.findByText('Invalid timezone')).toBeInTheDocument();
     expect(screen.queryByText('Saved.')).not.toBeInTheDocument();
+  });
+
+  it('renders the household name', () => {
+    render(<HouseholdSection {...baseProps} />);
+    expect(screen.getByText('The Smith House')).toBeInTheDocument();
+  });
+
+  it('hides the switcher button when the viewer belongs to only one household', () => {
+    render(<HouseholdSection {...baseProps} />);
+    expect(screen.queryByRole('button', { name: 'Switch household' })).not.toBeInTheDocument();
+  });
+
+  it('opens the switcher modal, and selecting a household calls onSwitchHousehold and closes it', async () => {
+    const user = userEvent.setup();
+    const onSwitchHousehold = vi.fn();
+    render(
+      <HouseholdSection
+        {...baseProps}
+        memberships={[
+          { householdId: 1, householdName: 'The Smith House' },
+          { householdId: 2, householdName: 'The Jones House' },
+        ]}
+        onSwitchHousehold={onSwitchHousehold}
+      />,
+    );
+
+    const switcherButton = screen.getByRole('button', { name: 'Switch household' });
+    await user.click(switcherButton);
+
+    const modal = screen.getByTestId('switch-household-modal-backdrop');
+    await user.click(within(modal).getByRole('button', { name: 'The Jones House' }));
+
+    expect(onSwitchHousehold).toHaveBeenCalledWith(2);
+    expect(screen.queryByTestId('switch-household-modal-backdrop')).not.toBeInTheDocument();
   });
 });

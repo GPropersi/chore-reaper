@@ -3,8 +3,10 @@ import type { Room } from '@customTypes/SharedTypes';
 import ConfirmDialog from '../common/ConfirmDialog';
 import StatusBanner from '../common/StatusBanner';
 import AddMemberModal, { type AddMemberInput } from './AddMemberModal';
+import AddUserModal, { type AddUserInput } from './AddUserModal';
 import RoomsSection from './RoomsSection';
 import HouseholdSection from './HouseholdSection';
+import JoinRequestsSection from './JoinRequestsSection';
 import UsersDirectory from './UsersDirectory';
 import { apiFetch } from '../../utils/api';
 
@@ -16,35 +18,59 @@ export type Member = {
   timezone: string | null;
 };
 
+type Membership = {
+  householdId: number;
+  householdName: string;
+};
+
 type ApiResponse<T> = { success: boolean; data?: T; error?: string; warning?: string };
 
 type AdminPanelProps = {
   rooms: Room[];
   onRoomsChange: (rooms: Room[]) => void;
   householdId: number;
+  householdName: string;
   householdTimezone: string;
   onHouseholdTimezoneChange: (timezone: string) => void;
   isAdmin: boolean;
+  memberships: Membership[];
+  currentHouseholdId: number;
+  onSwitchHousehold: (householdId: number) => void;
 };
 
 export default function AdminPanel({
   rooms,
   onRoomsChange,
   householdId,
+  householdName,
   householdTimezone,
   onHouseholdTimezoneChange,
   isAdmin,
+  memberships,
+  currentHouseholdId,
+  onSwitchHousehold,
 }: AdminPanelProps) {
   const [members, setMembers] = useState<Member[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
+  const [addMemberError, setAddMemberError] = useState<string | null>(null);
+  const [canRequestJoin, setCanRequestJoin] = useState(false);
+  const [requestSubmitted, setRequestSubmitted] = useState(false);
 
   useEffect(() => {
     apiFetch('/api/members')
       .then((res) => res.json())
       .then((body: ApiResponse<Member[]>) => setMembers(body.data ?? []));
   }, []);
+
+  function openAddMember() {
+    setAddMemberError(null);
+    setCanRequestJoin(false);
+    setRequestSubmitted(false);
+    setIsAddOpen(true);
+  }
 
   async function handleAddMember(input: AddMemberInput) {
     const res = await apiFetch('/api/members', {
@@ -59,8 +85,48 @@ export default function AdminPanel({
       setIsAddOpen(false);
     } else {
       // Keep the modal open on failure (e.g. already a member of this household)
-      // so the admin can see what went wrong and correct the email.
-      setWarning(body.error ?? 'Could not add member');
+      // so the admin can see what went wrong and correct the email. A 403 here
+      // means the account doesn't exist yet — offer the request-an-admin path.
+      setAddMemberError(body.error ?? 'Could not add member');
+      setCanRequestJoin(res.status === 403);
+    }
+  }
+
+  async function handleRequestJoin(email: string) {
+    const res = await apiFetch('/api/members/requests', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    const body = (await res.json()) as ApiResponse<unknown>;
+    if (body.success) {
+      setRequestSubmitted(true);
+    } else {
+      setAddMemberError(body.error ?? 'Could not submit request');
+    }
+  }
+
+  async function handleAddUser(input: AddUserInput) {
+    const res = await apiFetch('/api/admin/members', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    const body = (await res.json()) as ApiResponse<Member>;
+    if (body.success && body.data) {
+      const data = body.data;
+      const messages: string[] = [];
+      if (data.householdId === householdId) {
+        setMembers((prev) => [...prev, data]);
+      } else {
+        const targetName = memberships.find((m) => m.householdId === data.householdId)?.householdName;
+        messages.push(`Added ${data.email} to ${targetName ?? 'the selected household'}.`);
+      }
+      if (body.warning) messages.push(body.warning);
+      if (messages.length > 0) setWarning(messages.join(' '));
+      setIsAddUserOpen(false);
+    } else {
+      setWarning(body.error ?? 'Could not add user');
     }
   }
 
@@ -81,8 +147,12 @@ export default function AdminPanel({
 
       <HouseholdSection
         householdId={householdId}
+        householdName={householdName}
         householdTimezone={householdTimezone}
         onTimezoneChange={onHouseholdTimezoneChange}
+        memberships={memberships}
+        currentHouseholdId={currentHouseholdId}
+        onSwitchHousehold={onSwitchHousehold}
       />
 
       <RoomsSection rooms={rooms} onRoomsChange={onRoomsChange} />
@@ -91,7 +161,7 @@ export default function AdminPanel({
         <h2 className="text-white text-lg font-semibold">Members</h2>
         <button
           type="button"
-          onClick={() => setIsAddOpen(true)}
+          onClick={openAddMember}
           className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 px-4 rounded-lg"
         >
           Add Member
@@ -126,7 +196,18 @@ export default function AdminPanel({
         ))}
       </ul>
 
-      {isAddOpen && <AddMemberModal onSubmit={handleAddMember} onCancel={() => setIsAddOpen(false)} />}
+      {isAddOpen && (
+        <AddMemberModal
+          onSubmit={handleAddMember}
+          onCancel={() => setIsAddOpen(false)}
+          error={addMemberError}
+          canRequestJoin={canRequestJoin}
+          onRequestJoin={handleRequestJoin}
+          requestSubmitted={requestSubmitted}
+        />
+      )}
+
+      {isAddUserOpen && <AddUserModal onSubmit={handleAddUser} onCancel={() => setIsAddUserOpen(false)} />}
 
       {pendingDeleteId != null && (
         <ConfirmDialog
@@ -138,7 +219,26 @@ export default function AdminPanel({
 
       {/* Global-admin-only, unlike everything else on this page — every
           other section here is open to any household member. */}
-      {isAdmin && <UsersDirectory />}
+      {isAdmin && (
+        <>
+          <JoinRequestsSection
+            onApproved={(member) => {
+              if (member.householdId === householdId) setMembers((prev) => [...prev, member]);
+            }}
+          />
+          <UsersDirectory
+            headerAction={
+              <button
+                type="button"
+                onClick={() => setIsAddUserOpen(true)}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 px-4 rounded-lg"
+              >
+                Add User
+              </button>
+            }
+          />
+        </>
+      )}
     </div>
   );
 }

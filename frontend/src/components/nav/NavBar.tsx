@@ -33,8 +33,13 @@ export default function NavBar({
 
   return (
     <div id="NavBar" className="border-b border-gray-700 flex-shrink-0">
-      <div className="container mx-auto flex items-center justify-between space-x-1 overflow-x-auto scrollbar-none">
-        <div className="flex items-center space-x-1">
+      <div className="container mx-auto flex items-center justify-between">
+        {/* min-w-0 lets this flex child actually shrink below its content
+            width — without it, overflow-x-auto never kicks in and the room
+            tabs push the whole bar (including House) wider instead of
+            scrolling. House sits outside this container entirely so it's
+            never part of the scrolling region. */}
+        <div className="flex items-center space-x-1 overflow-x-auto scrollbar-none min-w-0">
           {/* Only rendered for the (still uncommon) case of belonging to more
               than one household — no UI change at all for the common
               single-household case. */}
@@ -44,7 +49,7 @@ export default function NavBar({
               value={currentHouseholdId}
               onChange={(e) => onSwitchHousehold(Number(e.target.value))}
               // 16px below sm avoids iOS Safari's zoom-on-focus for <select>.
-              className="bg-gray-800 text-gray-200 text-base sm:text-sm rounded px-2 py-1 mr-2"
+              className="bg-gray-800 text-gray-200 text-base sm:text-sm rounded px-2 py-1 mr-2 flex-shrink-0"
             >
               {memberships.map((m) => (
                 <option key={m.householdId} value={m.householdId}>
@@ -67,13 +72,20 @@ export default function NavBar({
         {/* Open to every household member now, not admin-only — the label
             just reflects whether this viewer also has admin privileges. The
             all-users directory lives inside this page too, at the bottom,
-            visible only to global admins — not a separate nav entry. */}
+            visible only to global admins — not a separate nav entry.
+            Teal (not the indigo used for active room tabs/buttons elsewhere)
+            marks this as a distinct, permanent app section rather than just
+            another filter tab — same color family for every viewer,
+            admin or not, active or not. flex-shrink-0 + living outside the
+            scrollable sibling above keeps it always on-screen. */}
         <NavLink
           to="/admin"
           data-testid="admin-nav-link"
           className={({ isActive }) =>
-            `px-4 sm:px-6 min-h-[44px] py-3 text-sm sm:text-base font-medium flex items-center ${
-              isActive ? 'border-b-2 border-indigo-500 text-indigo-400' : 'text-gray-400 hover:text-gray-200'
+            `flex-shrink-0 ml-2 px-4 sm:px-6 min-h-[44px] py-3 text-sm sm:text-base font-semibold flex items-center rounded-t-lg ${
+              isActive
+                ? 'bg-teal-800 text-teal-50 border-b-2 border-teal-300'
+                : 'bg-teal-900/40 text-teal-300 hover:bg-teal-900/60 hover:text-teal-100'
             }`
           }
         >

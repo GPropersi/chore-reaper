@@ -25,7 +25,7 @@ describe('NavBar', () => {
 
   it('does not mark the Admin link as active while on another route', () => {
     renderNavBar(true);
-    expect(screen.getByTestId('admin-nav-link')).not.toHaveClass('text-indigo-400');
+    expect(screen.getByTestId('admin-nav-link')).not.toHaveClass('bg-teal-800');
   });
 
   it('marks the Admin link as active while on the Admin route', () => {
@@ -35,7 +35,23 @@ describe('NavBar', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByTestId('admin-nav-link')).toHaveClass('text-indigo-400');
+    expect(screen.getByTestId('admin-nav-link')).toHaveClass('bg-teal-800');
+  });
+
+  it('uses the same distinct teal color family regardless of admin status', () => {
+    const { rerender } = render(
+      <MemoryRouter>
+        <NavBar rooms={[]} selectedRoom="all" onSelect={() => {}} isAdmin={false} />
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId('admin-nav-link')).toHaveClass('bg-teal-900/40');
+
+    rerender(
+      <MemoryRouter>
+        <NavBar rooms={[]} selectedRoom="all" onSelect={() => {}} isAdmin={true} />
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId('admin-nav-link')).toHaveClass('bg-teal-900/40');
   });
 
   it('does not leave "All" marked active while on the Admin route', () => {
@@ -52,5 +68,14 @@ describe('NavBar', () => {
     renderNavBar(true);
 
     expect(screen.getByRole('button', { name: 'All' })).toHaveClass('text-indigo-400');
+  });
+
+  it('keeps the House link outside the scrollable room-tabs region, and never shrinks it', () => {
+    renderNavBar(true);
+
+    const roomTabsRegion = screen.getByRole('button', { name: 'All' }).closest('.overflow-x-auto');
+    expect(roomTabsRegion).not.toBeNull();
+    expect(roomTabsRegion).not.toContainElement(screen.getByTestId('admin-nav-link'));
+    expect(screen.getByTestId('admin-nav-link')).toHaveClass('flex-shrink-0');
   });
 });

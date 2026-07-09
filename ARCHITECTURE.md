@@ -124,13 +124,35 @@ scripts/           Root-level scripts (git hooks installer)
   adding an already-registered user to a household is open to any member. See the comment in
   `backend/src/app.ts` above the `/api/members` mount. The one exception is `/api/admin/*`
   (`routes/admin.ts`), which is admin-gated as blanket middleware (`requireGlobalAdmin`) since everything
-  under it is inherently admin-only, cross-household territory — currently just `GET /api/admin/users`,
-  a read-only directory of every user in the app and which household(s) they belong to, rendered at the
-  bottom of the frontend's Admin page (`AdminPanel.tsx` → `UsersDirectory.tsx`) only when `isAdmin` is true.
-- **Auto-provisioning Access**: when a new member is added, `access-allowlist.ts` calls the Cloudflare
-  Access API to add their email to the reusable Access policy automatically. This is best-effort — a
-  failure degrades to a `warning` in the API response telling the admin to add the email manually in the
-  Zero Trust dashboard, never blocks the D1 write.
+  under it is inherently admin-only, cross-household territory:
+  - `GET /api/admin/users` — read-only directory of every user in the app and which household(s) they
+    belong to, rendered at the bottom of the frontend's Admin page (`AdminPanel.tsx` → `UsersDirectory.tsx`).
+  - `GET /api/admin/households` — lists every household (id + name), powering the searchable household
+    picker (`HouseholdSearchSelect.tsx`) in the admin-only "Add User" flow below.
+  - `POST /api/admin/members` — lets an admin add a user (new or existing) to _any_ household, not just
+    their own current one, since the target `householdId` is caller-supplied here rather than sourced
+    from session (the one deliberate exception to the tenant-isolation rule below — safe only because this
+    route sits behind `requireGlobalAdmin`). Backed by `adminAddHouseholdMember` in `members.ts`, a
+    counterpart to `addHouseholdMember` with no `callerIsAdmin` gate (the caller is already verified
+    admin) and an optional `makeAdmin` flag that sets `users.is_admin` on the brand-new-account path only
+    (never on the already-has-an-account path). Frontend: `AdminPanel.tsx` → `AddUserModal.tsx`.
+  - `GET /api/admin/join-requests`, `POST /api/admin/join-requests/:id/approve`,
+    `POST /api/admin/join-requests/:id/deny` — the admin side of the join-request workflow below.
+- **Join requests**: a non-admin member adding an email with no existing account gets rejected
+  (`new_user_requires_admin`, 403) by `POST /api/members`, same as before — but the frontend now offers an
+  escalation path (`AddMemberModal.tsx`'s "Ask an admin to add this person" button) that calls
+  `POST /api/members/requests` (household-scoped, `householdId` from session like every other
+  member-scoped write) to create a pending row in the `join_requests` table (`backend/src/join-requests.ts`).
+  Admins see every pending request across every household (`JoinRequestsSection.tsx`, self-fetching,
+  rendered above `UsersDirectory` in `AdminPanel.tsx`) and can approve (creates the user + membership via
+  `adminAddHouseholdMember`, same as the admin-direct-add path, preserving the original requester as
+  `household_members.invited_by`) or deny (status flip only, no side effects).
+- **Auto-provisioning Access**: when a new member is added — via `POST /api/members`, `POST
+/api/admin/members`, or a join-request approval — the route calls
+  `grantAccessAndDescribeWarning` (`access-allowlist.ts`), a shared helper wrapping
+  `grantAccessListEntry` that adds the email to the reusable Cloudflare Access policy. This is
+  best-effort — a failure degrades to a `warning` in the API response telling the admin to add the email
+  manually in the Zero Trust dashboard, never blocks the D1 write.
 
 ## Database (D1)
 
@@ -146,7 +168,9 @@ application-level (`household_id` columns), not per-tenant databases.
   the snapshot-then-rebuild dance SQLite's FK/CHECK-constraint limitations force on every one of these).
 - **Core tables**: `households`, `users` (`is_admin` is the only global per-account flag —
   `households`/`chores`/`rooms` scoping is entirely via `household_id`), `household_members` (pure join
-  table: user × household membership, no role), `rooms`, `chores`. Naming history: this schema was
+  table: user × household membership, no role), `rooms`, `chores`, `join_requests` (0007 — a member's
+  request that a not-yet-registered email be added to their household; `status` cycles
+  `pending` → `approved`/`denied`, resolved only by an admin). Naming history: this schema was
   originally "organizations" (0001–0003), renamed to "households" in 0004, the member role vocabulary
   (`member` → `user`) was renamed in 0005, and 0006 moved admin/user from a per-household
   `household_members.role` to a global `users.is_admin` while finally dropping the legacy
@@ -258,24 +282,27 @@ mean this can never be offline-_capable_, only offline-_tolerant_). Two mechanis
 
 ## Where to look for X
 
-| I need to...                                                      | Look at                                                                                                                                                           |
-| ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Understand the whole backend's route/middleware shape at a glance | `backend/src/app.ts`                                                                                                                                              |
-| Add or change an API endpoint                                     | `backend/src/routes/<resource>.ts` + its data-access sibling (e.g. `backend/src/chores.ts`)                                                                       |
-| Change auth/JWT verification behavior                             | `backend/src/middleware/access-auth.ts`                                                                                                                           |
-| Change how household scoping/switching resolves                   | `backend/src/middleware/household-scope.ts`                                                                                                                       |
-| Change global admin status/gating or the all-users directory      | `backend/src/middleware/require-global-admin.ts`, `backend/src/admin-users.ts`, `backend/src/routes/admin.ts`, `frontend/src/components/admin/UsersDirectory.tsx` |
-| Add a DB column/table                                             | New file in `backend/migrations/` — never edit a merged one                                                                                                       |
-| Change the shared API response/entity shapes                      | `types/SharedTypes.d.ts`                                                                                                                                          |
-| Change the single fetch entrypoint (headers, preview mocking)     | `frontend/src/utils/api.ts`                                                                                                                                       |
-| Change routing/top-level data loading                             | `frontend/src/App.tsx`                                                                                                                                            |
-| Change the offline write queue                                    | `frontend/src/outbox/`                                                                                                                                            |
-| Run local dev                                                     | `/run-dev` skill, or `npm run dev` at repo root                                                                                                                   |
-| Push a branch / open a PR as the bot                              | `/bot-push` skill (`c4i-claude-bot[bot]`, standing default per project instructions — don't ask first)                                                            |
-| Understand the cloud-vs-local tradeoff rationale                  | `TRADEOFFS.md`                                                                                                                                                    |
-| Check the day's work log                                          | `changelog/MM-DD-YYYY-changelog.md`                                                                                                                               |
-| Change CI/CD                                                      | `.github/workflows/ci.yml`                                                                                                                                        |
-| Change Worker routing/bindings/secrets config                     | `backend/wrangler.toml`                                                                                                                                           |
+| I need to...                                                      | Look at                                                                                                                                                                                                                                             |
+| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Understand the whole backend's route/middleware shape at a glance | `backend/src/app.ts`                                                                                                                                                                                                                                |
+| Add or change an API endpoint                                     | `backend/src/routes/<resource>.ts` + its data-access sibling (e.g. `backend/src/chores.ts`)                                                                                                                                                         |
+| Change auth/JWT verification behavior                             | `backend/src/middleware/access-auth.ts`                                                                                                                                                                                                             |
+| Change how household scoping/switching resolves                   | `backend/src/middleware/household-scope.ts`                                                                                                                                                                                                         |
+| Change global admin status/gating or the all-users directory      | `backend/src/middleware/require-global-admin.ts`, `backend/src/admin-users.ts`, `backend/src/routes/admin.ts`, `frontend/src/components/admin/UsersDirectory.tsx`                                                                                   |
+| Change admin cross-household add-user or the household picker     | `backend/src/routes/admin.ts` (`POST /members`), `backend/src/members.ts` (`adminAddHouseholdMember`), `frontend/src/components/admin/AddUserModal.tsx`, `frontend/src/components/form/HouseholdSearchSelect.tsx`                                   |
+| Change the join-request (member-requests-new-user) workflow       | `backend/src/join-requests.ts`, `backend/src/routes/members.ts` (`POST /requests`), `backend/src/routes/admin.ts` (`/join-requests/*`), `frontend/src/components/admin/AddMemberModal.tsx`, `frontend/src/components/admin/JoinRequestsSection.tsx` |
+| Change the household name/switcher shown in the admin panel       | `frontend/src/components/admin/HouseholdSection.tsx` (uses the same `switchHousehold` plumbing as `NavBar.tsx`, threaded through `App.tsx`/`AdminPanel.tsx`)                                                                                        |
+| Add a DB column/table                                             | New file in `backend/migrations/` — never edit a merged one                                                                                                                                                                                         |
+| Change the shared API response/entity shapes                      | `types/SharedTypes.d.ts`                                                                                                                                                                                                                            |
+| Change the single fetch entrypoint (headers, preview mocking)     | `frontend/src/utils/api.ts`                                                                                                                                                                                                                         |
+| Change routing/top-level data loading                             | `frontend/src/App.tsx`                                                                                                                                                                                                                              |
+| Change the offline write queue                                    | `frontend/src/outbox/`                                                                                                                                                                                                                              |
+| Run local dev                                                     | `/run-dev` skill, or `npm run dev` at repo root                                                                                                                                                                                                     |
+| Push a branch / open a PR as the bot                              | `/bot-push` skill (`c4i-claude-bot[bot]`, standing default per project instructions — don't ask first)                                                                                                                                              |
+| Understand the cloud-vs-local tradeoff rationale                  | `TRADEOFFS.md`                                                                                                                                                                                                                                      |
+| Check the day's work log                                          | `changelog/MM-DD-YYYY-changelog.md`                                                                                                                                                                                                                 |
+| Change CI/CD                                                      | `.github/workflows/ci.yml`                                                                                                                                                                                                                          |
+| Change Worker routing/bindings/secrets config                     | `backend/wrangler.toml`                                                                                                                                                                                                                             |
 
 ## Conventions worth knowing
 

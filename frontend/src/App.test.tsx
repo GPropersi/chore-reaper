@@ -176,6 +176,7 @@ describe('App', () => {
         }
         if (url === '/api/members') return jsonResponse({ success: true, data: [] });
         if (url === '/api/admin/users') return jsonResponse({ success: true, data: [] });
+        if (url === '/api/admin/join-requests') return jsonResponse({ success: true, data: [] });
         if (url === '/api/rooms') return jsonResponse(roomsResponse);
         throw new Error(`Unhandled fetch: ${url}`);
       }),
@@ -220,6 +221,7 @@ describe('App', () => {
               ],
             });
           }
+          if (url === '/api/admin/join-requests') return jsonResponse({ success: true, data: [] });
           throw new Error(`Unhandled fetch: ${url}`);
         }),
       );
