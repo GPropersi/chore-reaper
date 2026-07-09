@@ -55,8 +55,10 @@ admin.post('/households', async (c) => {
 // verified the caller is a global admin.
 //
 // A caller may supply newHouseholdName instead of householdId, to create the
-// household and the member in one step (the household's own timezone reuses
-// the member's timezone, since this form has no separate field for it).
+// household and the member in one step. newHouseholdTimezone is the new
+// household's own timezone — deliberately separate from the member-level
+// `timezone` field below, same validation contract as POST /households
+// (default UTC when omitted, 400 when present but invalid).
 admin.post('/members', async (c) => {
   const body = await c.req.json<Record<string, unknown>>();
   const newHouseholdName = typeof body.newHouseholdName === 'string' ? body.newHouseholdName.trim() : '';
@@ -67,9 +69,14 @@ admin.post('/members', async (c) => {
 
   let householdId: number;
   if (newHouseholdName) {
-    const timezone =
-      typeof body.timezone === 'string' && isValidTimezone(body.timezone) ? body.timezone : 'UTC';
-    const householdResult = await createHousehold(c.env.DB, newHouseholdName, timezone);
+    const newHouseholdTimezone =
+      typeof body.newHouseholdTimezone === 'string' && body.newHouseholdTimezone
+        ? body.newHouseholdTimezone
+        : 'UTC';
+    if (!isValidTimezone(newHouseholdTimezone)) {
+      return c.json({ success: false, error: 'Invalid timezone' } satisfies ApiResponse<never>, 400);
+    }
+    const householdResult = await createHousehold(c.env.DB, newHouseholdName, newHouseholdTimezone);
     if (householdResult.status === 'duplicate_name') {
       return c.json(
         {

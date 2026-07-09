@@ -10,7 +10,7 @@ export type AddUserInput = {
   email: string;
   timezone: string;
   makeAdmin: boolean;
-} & ({ householdId: number } | { newHouseholdName: string });
+} & ({ householdId: number } | { newHouseholdName: string; newHouseholdTimezone: string });
 
 type AddUserModalProps = {
   onSubmit: (input: AddUserInput) => void;
@@ -22,6 +22,10 @@ export default function AddUserModal({ onSubmit, onCancel }: AddUserModalProps) 
   const [household, setHousehold] = useState<HouseholdSelection | null>(null);
   const [email, setEmail] = useState('');
   const [timezone, setTimezone] = useState('');
+  // UTC is the same default CreateHouseholdModal/bootstrap-admin.ts use for a
+  // brand-new household — deliberately separate from the member's own
+  // `timezone` above, which is a distinct, optional, per-person setting.
+  const [newHouseholdTimezone, setNewHouseholdTimezone] = useState('UTC');
   const [makeAdmin, setMakeAdmin] = useState(false);
 
   useEffect(() => {
@@ -40,7 +44,9 @@ export default function AddUserModal({ onSubmit, onCancel }: AddUserModalProps) 
     event.preventDefault();
     if (household == null || !email) return;
     const householdFields =
-      household.type === 'existing' ? { householdId: household.id } : { newHouseholdName: household.name };
+      household.type === 'existing'
+        ? { householdId: household.id }
+        : { newHouseholdName: household.name, newHouseholdTimezone };
     onSubmit({ ...householdFields, email, timezone, makeAdmin });
   }
 
@@ -60,6 +66,14 @@ export default function AddUserModal({ onSubmit, onCancel }: AddUserModalProps) 
             value={household}
             onChange={setHousehold}
           />
+          {household?.type === 'new' && (
+            <TimezoneSelect
+              id="new-household-timezone"
+              label="Household Timezone"
+              value={newHouseholdTimezone}
+              onChange={setNewHouseholdTimezone}
+            />
+          )}
           <FormField
             name="email"
             label="Email"

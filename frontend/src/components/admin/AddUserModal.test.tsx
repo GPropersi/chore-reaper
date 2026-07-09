@@ -91,7 +91,7 @@ describe('AddUserModal', () => {
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ makeAdmin: false }));
   });
 
-  it('lets an admin create a brand-new household inline and submits newHouseholdName', async () => {
+  it('lets an admin create a brand-new household inline, defaulting its timezone to UTC', async () => {
     stubHouseholdsFetch();
     const user = userEvent.setup();
     const onSubmit = vi.fn();
@@ -99,9 +99,11 @@ describe('AddUserModal', () => {
 
     await user.type(screen.getByLabelText('Household'), 'The Lake House');
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    expect(screen.queryByLabelText('Household Timezone')).not.toBeInTheDocument();
 
     await user.click(await screen.findByRole('option', { name: /Create new household/ }));
     expect(screen.getByText(/Will create a new household named/)).toBeInTheDocument();
+    expect(screen.getByLabelText('Household Timezone')).toBeInTheDocument();
 
     await user.type(screen.getByLabelText('Email'), 'new@example.com');
     expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
@@ -109,9 +111,46 @@ describe('AddUserModal', () => {
 
     expect(onSubmit).toHaveBeenCalledWith({
       newHouseholdName: 'The Lake House',
+      newHouseholdTimezone: 'UTC',
       email: 'new@example.com',
       timezone: '',
       makeAdmin: false,
     });
+  });
+
+  it('lets an admin pick an explicit household timezone, independent of the member timezone', async () => {
+    stubHouseholdsFetch();
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    render(<AddUserModal onSubmit={onSubmit} onCancel={vi.fn()} />);
+
+    await user.type(screen.getByLabelText('Household'), 'The Lake House');
+    await user.click(await screen.findByRole('option', { name: /Create new household/ }));
+    await user.selectOptions(screen.getByLabelText('Household Timezone'), 'America/Denver');
+    await user.type(screen.getByLabelText('Email'), 'new@example.com');
+    await user.selectOptions(screen.getByLabelText('Timezone'), 'America/New_York');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        newHouseholdTimezone: 'America/Denver',
+        timezone: 'America/New_York',
+      }),
+    );
+  });
+
+  it('hides the Household Timezone field again after switching back to an existing household', async () => {
+    stubHouseholdsFetch();
+    const user = userEvent.setup();
+    render(<AddUserModal onSubmit={vi.fn()} onCancel={vi.fn()} />);
+
+    await user.type(screen.getByLabelText('Household'), 'The Lake House');
+    await user.click(await screen.findByRole('option', { name: /Create new household/ }));
+    expect(screen.getByLabelText('Household Timezone')).toBeInTheDocument();
+
+    await user.clear(screen.getByLabelText('Household'));
+    await user.type(screen.getByLabelText('Household'), 'Smith');
+    await user.click(await screen.findByRole('option', { name: 'The Smith House' }));
+    expect(screen.queryByLabelText('Household Timezone')).not.toBeInTheDocument();
   });
 });
