@@ -4,6 +4,7 @@ import app from '../../src/app.js';
 import { signTestJwt } from '../helpers/sign-test-jwt.js';
 import { stubAccessJwks, testEnv, TEST_ACCESS_AUD, TEST_JWKS_URL } from '../helpers/access-test-env.js';
 import { seedHouseholdMember, seedAdditionalMembership } from '../helpers/seed.js';
+import { cleanupProtectedOwnerRow } from '../helpers/protected-owner.js';
 import primaryJwks from '../fixtures/test-jwks.json' with { type: 'json' };
 
 const ACCESS_ALLOWLIST_ENV = {
@@ -173,6 +174,29 @@ describe('DELETE /api/admin/users/:id', () => {
       testEnv(),
     );
     expect(res.status).toBe(404);
+  });
+
+  it('returns 403 when another admin targets the protected owner account, and leaves it in place', async () => {
+    await seedHouseholdMember({ id: 1, householdId: 1, email: 'admin@example.com', isAdmin: true });
+    await seedHouseholdMember({ id: 2, householdId: 1, email: 'giovannigp@gmail.com', isAdmin: true });
+
+    try {
+      const res = await app.request(
+        '/api/admin/users/2',
+        { method: 'DELETE', headers: await authHeader('admin@example.com') },
+        testEnv(),
+      );
+      expect(res.status).toBe(403);
+
+      const stillThere = await env.DB.prepare('SELECT id FROM users WHERE id = 2').first();
+      expect(stillThere).not.toBeNull();
+    } finally {
+      // This row is (correctly) never deletable through the app, so it
+      // would otherwise survive into every other test file's own blanket
+      // `DELETE FROM users` reset — see cleanupProtectedOwnerRow's own
+      // comment for why.
+      await cleanupProtectedOwnerRow(env.DB, 2);
+    }
   });
 
   it('deletes the user and their memberships across every household', async () => {

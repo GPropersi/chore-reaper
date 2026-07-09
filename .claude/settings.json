@@ -18,12 +18,17 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/scripts/hook-block-cd-redirect.sh",
+            "command": ".claude/scripts/hook-block-cd-compound.sh",
             "timeout": 10
           },
           {
             "type": "command",
             "command": ".claude/scripts/hook-block-cmdsub.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": ".claude/scripts/hook-allow-safe-readonly.sh",
             "timeout": 10
           }
         ]

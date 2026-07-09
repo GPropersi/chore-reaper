@@ -78,7 +78,15 @@ export async function promoteUserToAdmin(db: D1Database, userId: number): Promis
   return { status: 'promoted', user };
 }
 
-export type DeleteUserResult = { status: 'deleted'; email: string } | { status: 'not_found' };
+export type DeleteUserResult =
+  { status: 'deleted'; email: string } | { status: 'not_found' } | { status: 'protected' };
+
+// The app owner's account — never deletable, by anyone, through any path.
+// Also enforced at the database layer by the prevent_owner_account_deletion
+// trigger (migration 0009), so this check exists purely to surface a
+// friendly 403 instead of a raw SQL error; the trigger is what makes the
+// delete actually impossible.
+const PROTECTED_OWNER_EMAIL = 'giovannigp@gmail.com';
 
 // Cascades a user delete across every table with a live FK to users(id) —
 // D1 enforces foreign keys, so these have to run in this order (see the
@@ -94,6 +102,9 @@ export async function deleteUser(db: D1Database, userId: number): Promise<Delete
   }>();
   if (!user) {
     return { status: 'not_found' };
+  }
+  if (user.email === PROTECTED_OWNER_EMAIL) {
+    return { status: 'protected' };
   }
 
   await db.batch([

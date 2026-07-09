@@ -116,6 +116,12 @@ admin.delete('/users/:id', async (c) => {
   if (result.status === 'not_found') {
     return c.json({ success: false, error: 'User not found' } satisfies ApiResponse<never>, 404);
   }
+  if (result.status === 'protected') {
+    return c.json(
+      { success: false, error: 'This account cannot be deleted' } satisfies ApiResponse<never>,
+      403,
+    );
+  }
 
   const warning = await revokeAccessAndDescribeWarning(c.env, result.email, {
     userId: id,
