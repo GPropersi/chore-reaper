@@ -4,6 +4,7 @@ export type AppVariables = {
   householdId: number;
   isAdmin: boolean;
   timezone: string | null;
+  swipeStyle: 'ios' | 'android';
 };
 
 export type AppEnv = { Bindings: Env; Variables: AppVariables };

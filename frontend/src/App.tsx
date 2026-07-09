@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Outlet, useOutletContext, useNavigate } from 'react-router-dom';
-import type { Room } from '@customTypes/SharedTypes';
+import type { Room, SwipeStyle } from '@customTypes/SharedTypes';
 import NavBar from './components/nav/NavBar';
 import AdminPanel from './components/admin/AdminPanel';
 import ChoresView from './components/chore/ChoresView';
@@ -17,6 +17,7 @@ type Me = {
   email: string;
   timezone: string;
   isAdmin: boolean;
+  swipeStyle: SwipeStyle;
   memberships: Membership[];
   currentHouseholdId: number;
 };
@@ -84,6 +85,15 @@ function useMe() {
     // switchHousehold below, not by re-running this effect.
   }, []);
 
+  function updateSwipeStyle(swipeStyle: SwipeStyle) {
+    setMe((prev) => {
+      if (!prev) return prev;
+      const updated = { ...prev, swipeStyle };
+      localStorage.setItem(ME_CACHE_KEY, JSON.stringify(updated));
+      return updated;
+    });
+  }
+
   function updateHouseholdTimezone(householdTimezone: string) {
     setMe((prev) => {
       if (!prev) return prev;
@@ -104,7 +114,7 @@ function useMe() {
     load().finally(() => setLoading(false));
   }
 
-  return { me, loading, updateHouseholdTimezone, switchHousehold };
+  return { me, loading, updateHouseholdTimezone, updateSwipeStyle, switchHousehold };
 }
 
 type LayoutContext = {
@@ -138,7 +148,15 @@ function Layout({ isAdmin }: LayoutProps) {
   );
 }
 
-function Home({ me, currentMembership }: { me: Me | null; currentMembership: Membership | undefined }) {
+function Home({
+  me,
+  currentMembership,
+  onSwipeStyleChange,
+}: {
+  me: Me | null;
+  currentMembership: Membership | undefined;
+  onSwipeStyleChange: (swipeStyle: SwipeStyle) => void;
+}) {
   const { selectedRoom, rooms } = useOutletContext<LayoutContext>();
   if (!me || !currentMembership) return null;
   return (
@@ -147,6 +165,8 @@ function Home({ me, currentMembership }: { me: Me | null; currentMembership: Mem
         householdTimezone={currentMembership.householdTimezone}
         selectedRoom={selectedRoom}
         rooms={rooms}
+        swipeStyle={me.swipeStyle}
+        onSwipeStyleChange={onSwipeStyleChange}
       />
     </div>
   );
@@ -183,7 +203,7 @@ function AdminRoute({
 }
 
 function App() {
-  const { me, loading, updateHouseholdTimezone, switchHousehold } = useMe();
+  const { me, loading, updateHouseholdTimezone, updateSwipeStyle, switchHousehold } = useMe();
   const currentMembership = me?.memberships.find((m) => m.householdId === me.currentHouseholdId);
 
   if (loading) return null;
@@ -203,7 +223,12 @@ function App() {
             />
           }
         >
-          <Route path="/" element={<Home me={me} currentMembership={currentMembership} />} />
+          <Route
+            path="/"
+            element={
+              <Home me={me} currentMembership={currentMembership} onSwipeStyleChange={updateSwipeStyle} />
+            }
+          />
           <Route
             path="/admin"
             element={

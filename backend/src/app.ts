@@ -17,7 +17,7 @@ app.get('/', (c) => c.text('ok'));
 app.use('/api/chores/*', accessAuth, householdScope);
 app.route('/api/chores', chores);
 
-app.use('/api/me', accessAuth, householdScope);
+app.use('/api/me/*', accessAuth, householdScope);
 app.route('/api/me', me);
 
 // All household members have open access to member management — the one

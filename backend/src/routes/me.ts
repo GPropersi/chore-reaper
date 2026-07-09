@@ -28,6 +28,7 @@ me.get('/', async (c) => {
     email: c.var.verifiedEmail,
     timezone: c.var.timezone ?? current?.household_timezone ?? null,
     isAdmin: c.var.isAdmin,
+    swipeStyle: c.var.swipeStyle,
     memberships: memberships.results.map((m) => ({
       householdId: m.household_id,
       householdName: m.household_name,
@@ -35,6 +36,20 @@ me.get('/', async (c) => {
     })),
     currentHouseholdId: c.var.householdId,
   });
+});
+
+me.patch('/swipe-style', async (c) => {
+  const body = await c.req.json<Record<string, unknown>>();
+  const swipeStyle = body.swipeStyle;
+  if (swipeStyle !== 'ios' && swipeStyle !== 'android') {
+    return c.json({ success: false, error: 'Invalid swipe style' }, 400);
+  }
+
+  await c.env.DB.prepare('UPDATE users SET swipe_style = ? WHERE id = ?')
+    .bind(swipeStyle, c.var.userId)
+    .run();
+
+  return c.json({ success: true, data: { swipeStyle } });
 });
 
 export default me;

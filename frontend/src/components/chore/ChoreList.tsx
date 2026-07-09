@@ -1,4 +1,4 @@
-import type { Chore } from '@customTypes/SharedTypes';
+import type { Chore, SwipeStyle } from '@customTypes/SharedTypes';
 import ChoreTimerBar from './ChoreTimerBar';
 
 type ChoreListProps = {
@@ -6,6 +6,7 @@ type ChoreListProps = {
   day: Date;
   householdTimezone: string;
   isSimulating: boolean;
+  swipeStyle: SwipeStyle;
   onComplete: (id: number, date: Date) => void;
   onDelete: (id: number) => void;
   onEdit?: (id: number) => void;
@@ -16,6 +17,7 @@ export default function ChoreList({
   day,
   householdTimezone,
   isSimulating,
+  swipeStyle,
   onComplete,
   onDelete,
   onEdit,
@@ -36,6 +38,7 @@ export default function ChoreList({
             day={day}
             householdTimezone={householdTimezone}
             isSimulating={isSimulating}
+            swipeStyle={swipeStyle}
             onComplete={onComplete}
             onDelete={onDelete}
             onEdit={onEdit}

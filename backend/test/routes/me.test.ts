@@ -43,6 +43,7 @@ describe('GET /api/me', () => {
       email: 'admin@example.com',
       timezone: 'America/Los_Angeles',
       isAdmin: true,
+      swipeStyle: 'ios',
       memberships: [
         {
           householdId: 1,
@@ -87,5 +88,43 @@ describe('GET /api/me', () => {
     expect(body.memberships.map((m) => m.householdId).sort()).toEqual([1, 2]);
     // isAdmin is global — stays true regardless of which household is active.
     expect(body.isAdmin).toBe(true);
+  });
+});
+
+describe('PATCH /api/me/swipe-style', () => {
+  it("updates the caller's own swipe style and it's reflected in a subsequent GET /api/me", async () => {
+    const token = await signTestJwt({ email: 'admin@example.com', aud: TEST_ACCESS_AUD });
+
+    const patchRes = await app.request(
+      '/api/me/swipe-style',
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Cf-Access-Jwt-Assertion': token },
+        body: JSON.stringify({ swipeStyle: 'android' }),
+      },
+      testEnv(),
+    );
+    expect(patchRes.status).toBe(200);
+    expect(await patchRes.json()).toEqual({ success: true, data: { swipeStyle: 'android' } });
+
+    const getRes = await app.request('/api/me', { headers: { 'Cf-Access-Jwt-Assertion': token } }, testEnv());
+    const body = (await getRes.json()) as { swipeStyle: string };
+    expect(body.swipeStyle).toBe('android');
+  });
+
+  it('rejects a value other than "ios" or "android"', async () => {
+    const token = await signTestJwt({ email: 'admin@example.com', aud: TEST_ACCESS_AUD });
+
+    const res = await app.request(
+      '/api/me/swipe-style',
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Cf-Access-Jwt-Assertion': token },
+        body: JSON.stringify({ swipeStyle: 'windows-phone' }),
+      },
+      testEnv(),
+    );
+
+    expect(res.status).toBe(400);
   });
 });
