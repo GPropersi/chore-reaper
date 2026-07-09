@@ -181,6 +181,33 @@ describe('mockFetch: /api/admin/users', () => {
   });
 });
 
+describe('mockFetch: DELETE /api/admin/users/:id', () => {
+  it('removes the user so they no longer appear in /api/members or /api/admin/users', async () => {
+    const before = await json<{ data: { id: number; email: string }[] }>(await mockFetch('/api/members'));
+    const target = before.data.find((m) => m.email !== 'preview@example.com')!;
+
+    const res = await mockFetch(`/api/admin/users/${target.id}`, { method: 'DELETE' });
+    expect(res.status).toBe(200);
+
+    const members = await json<{ data: { id: number }[] }>(await mockFetch('/api/members'));
+    expect(members.data.map((m) => m.id)).not.toContain(target.id);
+    const users = await json<{ data: { id: number }[] }>(await mockFetch('/api/admin/users'));
+    expect(users.data.map((u) => u.id)).not.toContain(target.id);
+  });
+
+  it('returns 400 when targeting the current admin own account', async () => {
+    const me = await json<{ id: number }>(await mockFetch('/api/me'));
+
+    const res = await mockFetch(`/api/admin/users/${me.id}`, { method: 'DELETE' });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 404 for an unknown id', async () => {
+    const res = await mockFetch('/api/admin/users/999999', { method: 'DELETE' });
+    expect(res.status).toBe(404);
+  });
+});
+
 describe('mockFetch: /api/rooms', () => {
   it('GET returns a non-empty seeded list', async () => {
     const res = await mockFetch('/api/rooms');

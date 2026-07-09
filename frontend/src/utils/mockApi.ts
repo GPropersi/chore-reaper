@@ -180,6 +180,7 @@ const ROOM_ID_RE = /^\/api\/rooms\/(\d+)$/;
 const HOUSEHOLD_ID_RE = /^\/api\/households\/(\d+)$/;
 const JOIN_REQUEST_APPROVE_RE = /^\/api\/admin\/join-requests\/(\d+)\/approve$/;
 const JOIN_REQUEST_DENY_RE = /^\/api\/admin\/join-requests\/(\d+)\/deny$/;
+const ADMIN_USER_ID_RE = /^\/api\/admin\/users\/(\d+)$/;
 
 export async function mockFetch(path: string, init?: RequestInit): Promise<Response> {
   const method = (init?.method ?? 'GET').toUpperCase();
@@ -245,6 +246,18 @@ export async function mockFetch(path: string, init?: RequestInit): Promise<Respo
       households: [{ id: member.householdId, name: householdName }],
     }));
     return jsonResponse({ success: true, data });
+  }
+  const adminUserIdMatch = path.match(ADMIN_USER_ID_RE);
+  if (adminUserIdMatch && method === 'DELETE') {
+    const id = Number(adminUserIdMatch[1]);
+    if (id === me.id) {
+      return jsonResponse({ success: false, error: 'You cannot delete your own account' }, 400);
+    }
+    if (!members.some((m) => m.id === id)) {
+      return jsonResponse({ success: false, error: 'User not found' }, 404);
+    }
+    members = members.filter((m) => m.id !== id);
+    return jsonResponse({ success: true, data: null });
   }
   if (path === '/api/members' && method === 'POST') {
     const body = parseBody(init);
