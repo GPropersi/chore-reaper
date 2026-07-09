@@ -146,14 +146,19 @@ scripts/           Root-level scripts (git hooks installer)
     route sits behind `requireGlobalAdmin`). Backed by `adminAddHouseholdMember` in `members.ts`, a
     counterpart to `addHouseholdMember` with no `callerIsAdmin` gate (the caller is already verified
     admin) and an optional `makeAdmin` flag that sets `users.is_admin` on the brand-new-account path only
-    (never on the already-has-an-account path). Also accepts `newHouseholdName` as an alternative to
-    `householdId`, to create the household and the member in one request — the route calls
-    `createHousehold` (same 409-on-duplicate-name behavior as `POST /api/admin/households`) first to
-    resolve an id, reusing the submitted `timezone` for the household's own timezone too (there's no
-    separate household-timezone field on this form) and defaulting to `'UTC'` if none/invalid. Frontend:
-    `AdminPanel.tsx` → `AddUserModal.tsx` → `HouseholdSearchSelect.tsx`, whose combobox offers a
-    "Create new household" option (with an inline indicator once picked) when the typed name matches no
-    existing household.
+    (never on the already-has-an-account path). Also accepts `newHouseholdName` (+ optional
+    `newHouseholdTimezone`) as an alternative to `householdId`, to create the household and the member in
+    one request — the route calls `createHousehold` first to resolve an id, with the exact same
+    validation contract as `POST /api/admin/households` (defaults to `'UTC'` when omitted, 400s if
+    present but invalid). `newHouseholdTimezone` is deliberately a separate field from the member-level
+    `timezone` in the same request body — one sets the new household's own timezone, the other is the
+    added member's personal `users.timezone`; neither implies the other, and `users.timezone` is nullable
+    and currently informational-only (stored/displayed in the admin user list, not read by any
+    due-date/reset/notification logic, which is keyed exclusively off `households.timezone`). Frontend:
+    `AdminPanel.tsx` → `AddUserModal.tsx` → `HouseholdSearchSelect.tsx`,
+    whose combobox offers a "Create new household" option (with an inline indicator once picked) when the
+    typed name matches no existing household, revealing a second `TimezoneSelect` for the new household's
+    timezone alongside the existing member-timezone field.
   - `GET /api/admin/join-requests`, `POST /api/admin/join-requests/:id/approve`,
     `POST /api/admin/join-requests/:id/deny` — the admin side of the join-request workflow below.
   - `DELETE /api/admin/users/:id` — deletes a user account outright (not just a single household

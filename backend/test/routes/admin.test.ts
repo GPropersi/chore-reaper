@@ -283,7 +283,7 @@ describe('POST /api/admin/members', () => {
     expect(res.status).toBe(409);
   });
 
-  it('creates a brand-new household and adds the member to it when newHouseholdName is given', async () => {
+  it('creates a brand-new household and adds the member to it when newHouseholdName is given, defaulting timezone to UTC', async () => {
     const res = await app.request(
       '/api/admin/members',
       {
@@ -292,7 +292,6 @@ describe('POST /api/admin/members', () => {
         body: JSON.stringify({
           newHouseholdName: 'Household C',
           email: 'new@example.com',
-          timezone: 'America/Chicago',
         }),
       },
       testEnv(),
@@ -304,7 +303,49 @@ describe('POST /api/admin/members', () => {
     const household = await env.DB.prepare('SELECT name, timezone FROM households WHERE id = ?')
       .bind(body.data.householdId)
       .first<{ name: string; timezone: string }>();
-    expect(household).toMatchObject({ name: 'Household C', timezone: 'America/Chicago' });
+    expect(household).toMatchObject({ name: 'Household C', timezone: 'UTC' });
+  });
+
+  it('honors newHouseholdTimezone independently of the member-level timezone field', async () => {
+    const res = await app.request(
+      '/api/admin/members',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await authHeader('admin@example.com')) },
+        body: JSON.stringify({
+          newHouseholdName: 'Household C',
+          newHouseholdTimezone: 'America/Denver',
+          email: 'new@example.com',
+          timezone: 'America/Chicago',
+        }),
+      },
+      testEnv(),
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { data: { householdId: number; timezone: string | null } };
+    expect(body.data.timezone).toBe('America/Chicago');
+
+    const household = await env.DB.prepare('SELECT timezone FROM households WHERE id = ?')
+      .bind(body.data.householdId)
+      .first<{ timezone: string }>();
+    expect(household?.timezone).toBe('America/Denver');
+  });
+
+  it('returns 400 for an invalid newHouseholdTimezone', async () => {
+    const res = await app.request(
+      '/api/admin/members',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await authHeader('admin@example.com')) },
+        body: JSON.stringify({
+          newHouseholdName: 'Household C',
+          newHouseholdTimezone: 'Not/A_Zone',
+          email: 'new@example.com',
+        }),
+      },
+      testEnv(),
+    );
+    expect(res.status).toBe(400);
   });
 
   it('returns 409 when newHouseholdName collides with an existing household', async () => {
