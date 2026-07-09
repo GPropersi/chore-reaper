@@ -3,11 +3,19 @@ import type { HouseholdListItem, ApiResponse } from '@customTypes/SharedTypes';
 import { apiFetch } from '../../utils/api';
 import CreateHouseholdModal, { type CreateHouseholdInput } from './CreateHouseholdModal';
 
-// Self-contained like JoinRequestsSection, unlike UsersDirectory/AddUserModal
-// (which AdminPanel orchestrates externally) — creating a household never
-// needs to update any of AdminPanel's own state (the Members list, warnings,
-// etc.), so there's nothing for a parent to coordinate.
-export default function HouseholdsDirectory() {
+type HouseholdsDirectoryProps = {
+  // Bumped by AdminPanel when AddUserModal creates a household out-of-band
+  // (its inline "create new household" option) — this section otherwise has
+  // no way to learn about that, since it fetches its own list independently
+  // rather than sharing state with AddUserModal's own household fetch.
+  refreshKey?: number;
+};
+
+// Mostly self-contained like JoinRequestsSection, unlike UsersDirectory
+// (which AdminPanel orchestrates externally): its own Create Household flow
+// updates its list locally with no parent coordination needed. refreshKey is
+// the one exception, for the cross-component case above.
+export default function HouseholdsDirectory({ refreshKey }: HouseholdsDirectoryProps) {
   const [households, setHouseholds] = useState<HouseholdListItem[]>([]);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -16,7 +24,7 @@ export default function HouseholdsDirectory() {
     apiFetch('/api/admin/households')
       .then((res) => res.json())
       .then((body: ApiResponse<HouseholdListItem[]>) => setHouseholds(body.data ?? []));
-  }, []);
+  }, [refreshKey]);
 
   async function handleCreate(input: CreateHouseholdInput) {
     const res = await apiFetch('/api/admin/households', {

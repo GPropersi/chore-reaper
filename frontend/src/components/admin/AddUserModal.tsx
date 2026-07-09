@@ -3,15 +3,14 @@ import { useEffect, useState } from 'react';
 import type { ApiResponse, HouseholdListItem } from '@customTypes/SharedTypes';
 import FormField from '../form/FormField';
 import TimezoneSelect from '../form/TimezoneSelect';
-import HouseholdSearchSelect from '../form/HouseholdSearchSelect';
+import HouseholdSearchSelect, { type HouseholdSelection } from '../form/HouseholdSearchSelect';
 import { apiFetch } from '../../utils/api';
 
 export type AddUserInput = {
-  householdId: number;
   email: string;
   timezone: string;
   makeAdmin: boolean;
-};
+} & ({ householdId: number } | { newHouseholdName: string });
 
 type AddUserModalProps = {
   onSubmit: (input: AddUserInput) => void;
@@ -20,7 +19,7 @@ type AddUserModalProps = {
 
 export default function AddUserModal({ onSubmit, onCancel }: AddUserModalProps) {
   const [households, setHouseholds] = useState<HouseholdListItem[]>([]);
-  const [householdId, setHouseholdId] = useState<number | null>(null);
+  const [household, setHousehold] = useState<HouseholdSelection | null>(null);
   const [email, setEmail] = useState('');
   const [timezone, setTimezone] = useState('');
   const [makeAdmin, setMakeAdmin] = useState(false);
@@ -39,8 +38,10 @@ export default function AddUserModal({ onSubmit, onCancel }: AddUserModalProps) 
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    if (householdId == null || !email) return;
-    onSubmit({ householdId, email, timezone, makeAdmin });
+    if (household == null || !email) return;
+    const householdFields =
+      household.type === 'existing' ? { householdId: household.id } : { newHouseholdName: household.name };
+    onSubmit({ ...householdFields, email, timezone, makeAdmin });
   }
 
   return createPortal(
@@ -56,8 +57,8 @@ export default function AddUserModal({ onSubmit, onCancel }: AddUserModalProps) 
             id="add-user-household"
             label="Household"
             households={households}
-            value={householdId}
-            onChange={setHouseholdId}
+            value={household}
+            onChange={setHousehold}
           />
           <FormField
             name="email"
@@ -81,7 +82,7 @@ export default function AddUserModal({ onSubmit, onCancel }: AddUserModalProps) 
           <div className="flex gap-3 mt-2">
             <button
               type="submit"
-              disabled={householdId == null || !email}
+              disabled={household == null || !email}
               className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded-lg"
             >
               Save

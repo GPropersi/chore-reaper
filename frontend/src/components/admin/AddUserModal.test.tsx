@@ -90,4 +90,28 @@ describe('AddUserModal', () => {
 
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ makeAdmin: false }));
   });
+
+  it('lets an admin create a brand-new household inline and submits newHouseholdName', async () => {
+    stubHouseholdsFetch();
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    render(<AddUserModal onSubmit={onSubmit} onCancel={vi.fn()} />);
+
+    await user.type(screen.getByLabelText('Household'), 'The Lake House');
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+
+    await user.click(await screen.findByRole('option', { name: /Create new household/ }));
+    expect(screen.getByText(/Will create a new household named/)).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('Email'), 'new@example.com');
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(onSubmit).toHaveBeenCalledWith({
+      newHouseholdName: 'The Lake House',
+      email: 'new@example.com',
+      timezone: '',
+      makeAdmin: false,
+    });
+  });
 });
