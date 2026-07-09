@@ -24,6 +24,7 @@ const noRoomsProps = {
   isAdmin: false,
   memberships: [{ householdId: 1, householdName: 'The Smith House' }],
   currentHouseholdId: 1,
+  currentUserId: 1,
   onSwitchHousehold: () => {},
 };
 
@@ -192,6 +193,102 @@ describe('AdminPanel', () => {
     render(<AdminPanel {...noRoomsProps} isAdmin={true} />);
 
     expect(await screen.findByRole('heading', { name: 'Users' })).toBeInTheDocument();
+  });
+
+  it('hides the Delete button on the current admin own row but shows it for other users', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        const method = init?.method ?? 'GET';
+        if (url === '/api/members' && method === 'GET') {
+          return jsonResponse({ success: true, data: initialMembers });
+        }
+        if (url === '/api/admin/users' && method === 'GET') {
+          return jsonResponse({
+            success: true,
+            data: [
+              {
+                id: 1,
+                email: 'admin@example.com',
+                timezone: 'America/Chicago',
+                isAdmin: true,
+                households: [{ id: 1, name: 'Household A' }],
+              },
+              {
+                id: 2,
+                email: 'member@example.com',
+                timezone: null,
+                isAdmin: false,
+                households: [{ id: 1, name: 'Household A' }],
+              },
+            ],
+          });
+        }
+        if (url === '/api/admin/join-requests' && method === 'GET') {
+          return jsonResponse({ success: true, data: [] });
+        }
+        throw new Error(`Unhandled fetch: ${method} ${url}`);
+      }),
+    );
+
+    render(<AdminPanel {...noRoomsProps} isAdmin={true} currentUserId={1} />);
+
+    const list = await screen.findByTestId('admin-user-list');
+    const adminRow = within(list).getByText('admin@example.com').closest('li')!;
+    const memberRow = within(list).getByText('member@example.com').closest('li')!;
+    expect(within(adminRow).queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+    expect(within(memberRow).getByRole('button', { name: 'Delete' })).toBeInTheDocument();
+  });
+
+  it('flows delete-user through ConfirmDialog before calling DELETE /api/admin/users/:id', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        const method = init?.method ?? 'GET';
+        if (url === '/api/members' && method === 'GET') {
+          return jsonResponse({ success: true, data: initialMembers });
+        }
+        if (url === '/api/admin/users' && method === 'GET') {
+          return jsonResponse({
+            success: true,
+            data: [
+              {
+                id: 2,
+                email: 'member@example.com',
+                timezone: null,
+                isAdmin: false,
+                households: [{ id: 1, name: 'Household A' }],
+              },
+            ],
+          });
+        }
+        if (url === '/api/admin/join-requests' && method === 'GET') {
+          return jsonResponse({ success: true, data: [] });
+        }
+        if (url === '/api/admin/users/2' && method === 'DELETE') {
+          return jsonResponse({ success: true, data: null });
+        }
+        throw new Error(`Unhandled fetch: ${method} ${url}`);
+      }),
+    );
+
+    const user = userEvent.setup();
+    render(<AdminPanel {...noRoomsProps} isAdmin={true} currentUserId={1} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Delete' }));
+    const fetchMock = vi.mocked(fetch);
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(false);
+
+    await user.click(screen.getByTestId('confirm-dialog-confirm'));
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(true);
+    });
+    expect(
+      within(screen.getByTestId('admin-user-list')).queryByText('member@example.com'),
+    ).not.toBeInTheDocument();
   });
 
   it('does not render (or fetch) the Users directory when isAdmin is false', async () => {

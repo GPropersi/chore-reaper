@@ -1,10 +1,10 @@
 import { Hono } from 'hono';
 import type { ApiResponse } from '../../../types/SharedTypes.js';
-import { getAllUsersWithHouseholds } from '../admin-users.js';
+import { getAllUsersWithHouseholds, deleteUser } from '../admin-users.js';
 import { listAllHouseholds } from '../households.js';
 import { adminAddHouseholdMember } from '../members.js';
 import { listPendingJoinRequests, approveJoinRequest, denyJoinRequest } from '../join-requests.js';
-import { grantAccessAndDescribeWarning } from '../access-allowlist.js';
+import { grantAccessAndDescribeWarning, revokeAccessAndDescribeWarning } from '../access-allowlist.js';
 import type { AppEnv } from '../types.js';
 
 const admin = new Hono<AppEnv>();
@@ -65,6 +65,35 @@ admin.post('/members', async (c) => {
     { success: true, data, ...(warning ? { warning } : {}) } satisfies ApiResponse<typeof data>,
     201,
   );
+});
+
+// Deletes a user account outright — not just a single household membership,
+// unlike DELETE /api/members/:id. Cascades across every household the user
+// belongs to (deleteUser) and best-effort revokes their Cloudflare Access
+// entry, mirroring the grant flow on the add-member paths above.
+admin.delete('/users/:id', async (c) => {
+  const id = Number(c.req.param('id'));
+  if (Number.isNaN(id)) {
+    return c.json({ success: false, error: 'Invalid id' } satisfies ApiResponse<never>, 400);
+  }
+  if (id === c.var.userId) {
+    return c.json(
+      { success: false, error: 'You cannot delete your own account' } satisfies ApiResponse<never>,
+      400,
+    );
+  }
+
+  const result = await deleteUser(c.env.DB, id);
+  if (result.status === 'not_found') {
+    return c.json({ success: false, error: 'User not found' } satisfies ApiResponse<never>, 404);
+  }
+
+  const warning = await revokeAccessAndDescribeWarning(c.env, result.email, {
+    userId: id,
+    actor: c.var.verifiedEmail,
+  });
+
+  return c.json({ success: true, data: null, ...(warning ? { warning } : {}) } satisfies ApiResponse<null>);
 });
 
 admin.get('/join-requests', async (c) => {

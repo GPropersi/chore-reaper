@@ -138,6 +138,16 @@ scripts/           Root-level scripts (git hooks installer)
     (never on the already-has-an-account path). Frontend: `AdminPanel.tsx` → `AddUserModal.tsx`.
   - `GET /api/admin/join-requests`, `POST /api/admin/join-requests/:id/approve`,
     `POST /api/admin/join-requests/:id/deny` — the admin side of the join-request workflow below.
+  - `DELETE /api/admin/users/:id` — deletes a user account outright (not just a single household
+    membership, unlike `DELETE /api/members/:id`). Backed by `deleteUser` in `admin-users.ts`, which
+    cascades across every FK referencing `users(id)`: deletes the user's `household_members` rows
+    (every household, not just the caller's), nulls `invited_by`/`resolved_by` on rows the user acted on
+    (nullable), and deletes the user's own `join_requests` rows outright (`requested_by` is `NOT NULL`,
+    so those can't be orphaned). 400s if the caller targets their own account. Best-effort revokes the
+    user's Cloudflare Access entry via `revokeAccessAndDescribeWarning` (`access-allowlist.ts`), the
+    symmetrical counterpart to the grant flow below — same never-blocks-the-D1-write contract. Frontend:
+    `AdminPanel.tsx` → `UsersDirectory.tsx`, gated behind a confirm dialog, with the delete action hidden
+    on the caller's own row.
 - **Join requests**: a non-admin member adding an email with no existing account gets rejected
   (`new_user_requires_admin`, 403) by `POST /api/members`, same as before — but the frontend now offers an
   escalation path (`AddMemberModal.tsx`'s "Ask an admin to add this person" button) that calls
@@ -152,7 +162,9 @@ scripts/           Root-level scripts (git hooks installer)
   `grantAccessAndDescribeWarning` (`access-allowlist.ts`), a shared helper wrapping
   `grantAccessListEntry` that adds the email to the reusable Cloudflare Access policy. This is
   best-effort — a failure degrades to a `warning` in the API response telling the admin to add the email
-  manually in the Zero Trust dashboard, never blocks the D1 write.
+  manually in the Zero Trust dashboard, never blocks the D1 write. `DELETE /api/admin/users/:id` mirrors
+  this on the way out via `revokeAccessAndDescribeWarning`/`revokeAccessListEntry`, removing the email
+  from the same policy's `include` list.
 
 ## Database (D1)
 
@@ -167,15 +179,19 @@ application-level (`household_id` columns), not per-tenant databases.
   `0006_global_admin_users_cleanup.sql` for what that discipline looks like against live data, including
   the snapshot-then-rebuild dance SQLite's FK/CHECK-constraint limitations force on every one of these).
 - **Core tables**: `households`, `users` (`is_admin` is the only global per-account flag —
-  `households`/`chores`/`rooms` scoping is entirely via `household_id`), `household_members` (pure join
-  table: user × household membership, no role), `rooms`, `chores`, `join_requests` (0007 — a member's
-  request that a not-yet-registered email be added to their household; `status` cycles
-  `pending` → `approved`/`denied`, resolved only by an admin). Naming history: this schema was
-  originally "organizations" (0001–0003), renamed to "households" in 0004, the member role vocabulary
-  (`member` → `user`) was renamed in 0005, and 0006 moved admin/user from a per-household
+  `households`/`chores`/`rooms` scoping is entirely via `household_id`), `household_members` (user ×
+  household membership; `role` — 0008 — defaults every row to `'member'`, with `'head'` as the only other
+  allowed value so far; not read or written by any app logic yet, purely schema prep for a future
+  in-household role system, distinct from the global `users.is_admin` access-control flag), `rooms`,
+  `chores`, `join_requests` (0007 — a member's request that a not-yet-registered email be added to their
+  household; `status` cycles `pending` → `approved`/`denied`, resolved only by an admin). Naming history:
+  this schema was originally "organizations" (0001–0003), renamed to "households" in 0004, the member
+  role vocabulary (`member` → `user`) was renamed in 0005, and 0006 moved admin/user from a per-household
   `household_members.role` to a global `users.is_admin` while finally dropping the legacy
   `users.household_id`/`role`/`invited_by` columns that 0003 had promised (but never delivered) to clean
-  up — expect to see that lineage in migration comments if you're tracing schema history.
+  up — expect to see that lineage in migration comments if you're tracing schema history. 0008's `role`
+  column is unrelated to that removed one (household standing vs. admin/user), reusing the name after it
+  had been vacated.
 - **Local dev D1** is a Miniflare-emulated SQLite file, fully disposable — `npm run migrate:local` any
   time to reset/catch up.
 - **Tests** run against a real (in-memory, per-test) D1 via `@cloudflare/vitest-pool-workers` — not

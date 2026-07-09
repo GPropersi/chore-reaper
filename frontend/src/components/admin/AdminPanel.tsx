@@ -35,6 +35,7 @@ type AdminPanelProps = {
   isAdmin: boolean;
   memberships: Membership[];
   currentHouseholdId: number;
+  currentUserId: number;
   onSwitchHousehold: (householdId: number) => void;
 };
 
@@ -48,6 +49,7 @@ export default function AdminPanel({
   isAdmin,
   memberships,
   currentHouseholdId,
+  currentUserId,
   onSwitchHousehold,
 }: AdminPanelProps) {
   const [members, setMembers] = useState<Member[]>([]);
@@ -227,6 +229,7 @@ export default function AdminPanel({
             }}
           />
           <UsersDirectory
+            currentUserId={currentUserId}
             headerAction={
               <button
                 type="button"
