@@ -598,6 +598,68 @@ describe('AdminPanel', () => {
     ).toBeInTheDocument();
   });
 
+  it('adding a user via Add User refreshes the Users directory', async () => {
+    let adminUsers: {
+      id: number;
+      email: string;
+      isAdmin: boolean;
+      households: { id: number; name: string }[];
+    }[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        const method = init?.method ?? 'GET';
+        if (url === '/api/members' && method === 'GET')
+          return jsonResponse({ success: true, data: initialMembers });
+        if (url === '/api/admin/join-requests' && method === 'GET')
+          return jsonResponse({ success: true, data: [] });
+        if (url === '/api/admin/users' && method === 'GET')
+          return jsonResponse({ success: true, data: adminUsers });
+        if (url === '/api/admin/households' && method === 'GET') {
+          return jsonResponse({
+            success: true,
+            data: [
+              { id: 1, name: 'The Smith House' },
+              { id: 2, name: 'The Jones House' },
+            ],
+          });
+        }
+        if (url === '/api/admin/members' && method === 'POST') {
+          const body = JSON.parse(init!.body as string);
+          adminUsers = [
+            ...adminUsers,
+            {
+              id: 5,
+              email: body.email,
+              isAdmin: false,
+              households: [{ id: body.householdId, name: 'The Jones House' }],
+            },
+          ];
+          return jsonResponse({ success: true, data: { id: 5, isAdmin: false, ...body } });
+        }
+        throw new Error(`Unhandled fetch: ${method} ${url}`);
+      }),
+    );
+    const user = userEvent.setup();
+    render(<AdminPanel {...noRoomsProps} isAdmin={true} />);
+    await screen.findByText('admin@example.com');
+    expect(
+      within(await screen.findByTestId('admin-user-list')).queryByText('new-user@example.com'),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Add User' }));
+    const modal = screen.getByTestId('add-user-modal-backdrop');
+    await user.type(within(modal).getByLabelText('Household'), 'Jones');
+    await user.click(await within(modal).findByRole('option', { name: 'The Jones House' }));
+    await user.type(within(modal).getByLabelText('Email'), 'new-user@example.com');
+    await user.click(within(modal).getByRole('button', { name: 'Save' }));
+
+    expect(
+      await within(screen.getByTestId('admin-user-list')).findByText('new-user@example.com'),
+    ).toBeInTheDocument();
+  });
+
   it('requesting a join for a brand-new email posts to /api/members/requests and shows a confirmation', async () => {
     vi.stubGlobal(
       'fetch',

@@ -64,6 +64,7 @@ export default function AdminPanel({
   const [canRequestJoin, setCanRequestJoin] = useState(false);
   const [requestSubmitted, setRequestSubmitted] = useState(false);
   const [householdsRefreshKey, setHouseholdsRefreshKey] = useState(0);
+  const [usersRefreshKey, setUsersRefreshKey] = useState(0);
 
   useEffect(() => {
     apiFetch('/api/members')
@@ -122,6 +123,7 @@ export default function AdminPanel({
     if (body.success && body.data) {
       const data = body.data;
       if ('newHouseholdName' in input) setHouseholdsRefreshKey((prev) => prev + 1);
+      setUsersRefreshKey((prev) => prev + 1);
       const messages: string[] = [];
       if (data.householdId === householdId) {
         setMembers((prev) => [...prev, data]);
@@ -238,11 +240,13 @@ export default function AdminPanel({
           <JoinRequestsSection
             onApproved={(member) => {
               if (member.householdId === householdId) setMembers((prev) => [...prev, member]);
+              setUsersRefreshKey((prev) => prev + 1);
             }}
           />
           <HouseholdsDirectory refreshKey={householdsRefreshKey} />
           <UsersDirectory
             currentUserId={currentUserId}
+            refreshKey={usersRefreshKey}
             headerAction={
               <button
                 type="button"
