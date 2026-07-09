@@ -80,6 +80,111 @@ describe('GET /api/admin/households', () => {
   });
 });
 
+describe('POST /api/admin/households', () => {
+  it('returns 403 for a non-admin', async () => {
+    const res = await app.request(
+      '/api/admin/households',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await authHeader('member@example.com')) },
+        body: JSON.stringify({ name: 'Household C' }),
+      },
+      testEnv(),
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it('returns 400 when name is missing', async () => {
+    const res = await app.request(
+      '/api/admin/households',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await authHeader('admin@example.com')) },
+        body: JSON.stringify({}),
+      },
+      testEnv(),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 for an invalid timezone', async () => {
+    const res = await app.request(
+      '/api/admin/households',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await authHeader('admin@example.com')) },
+        body: JSON.stringify({ name: 'Household C', timezone: 'Not/A_Zone' }),
+      },
+      testEnv(),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('creates a household, defaulting timezone to UTC when omitted', async () => {
+    const res = await app.request(
+      '/api/admin/households',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await authHeader('admin@example.com')) },
+        body: JSON.stringify({ name: 'Household C' }),
+      },
+      testEnv(),
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { data: { id: number; name: string; timezone: string } };
+    expect(body.data).toMatchObject({ name: 'Household C', timezone: 'UTC' });
+    expect(body.data.id).toBeTypeOf('number');
+  });
+
+  it('honors a caller-supplied timezone', async () => {
+    const res = await app.request(
+      '/api/admin/households',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await authHeader('admin@example.com')) },
+        body: JSON.stringify({ name: 'Household C', timezone: 'America/Chicago' }),
+      },
+      testEnv(),
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { data: { timezone: string } };
+    expect(body.data.timezone).toBe('America/Chicago');
+  });
+
+  it('returns 409 for a duplicate name', async () => {
+    const res = await app.request(
+      '/api/admin/households',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await authHeader('admin@example.com')) },
+        body: JSON.stringify({ name: 'Household A' }),
+      },
+      testEnv(),
+    );
+    expect(res.status).toBe(409);
+  });
+
+  it('appears in a subsequent GET /api/admin/households', async () => {
+    await app.request(
+      '/api/admin/households',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await authHeader('admin@example.com')) },
+        body: JSON.stringify({ name: 'Household C' }),
+      },
+      testEnv(),
+    );
+
+    const res = await app.request(
+      '/api/admin/households',
+      { headers: await authHeader('admin@example.com') },
+      testEnv(),
+    );
+    const body = (await res.json()) as { data: { name: string }[] };
+    expect(body.data.map((h) => h.name)).toContain('Household C');
+  });
+});
+
 describe('POST /api/admin/members', () => {
   it('returns 403 for a non-admin', async () => {
     const res = await app.request(

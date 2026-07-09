@@ -150,6 +150,7 @@ let nextChoreId = 4;
 let nextMemberId = 3;
 let nextRoomId = 4;
 let nextJoinRequestId = 2;
+let nextHouseholdId = 3;
 
 export function resetMockData(): void {
   chores = seedChores();
@@ -162,6 +163,7 @@ export function resetMockData(): void {
   nextMemberId = 3;
   nextRoomId = 4;
   nextJoinRequestId = 2;
+  nextHouseholdId = 3;
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -180,6 +182,7 @@ const ROOM_ID_RE = /^\/api\/rooms\/(\d+)$/;
 const HOUSEHOLD_ID_RE = /^\/api\/households\/(\d+)$/;
 const JOIN_REQUEST_APPROVE_RE = /^\/api\/admin\/join-requests\/(\d+)\/approve$/;
 const JOIN_REQUEST_DENY_RE = /^\/api\/admin\/join-requests\/(\d+)\/deny$/;
+const ADMIN_USER_ID_RE = /^\/api\/admin\/users\/(\d+)$/;
 
 export async function mockFetch(path: string, init?: RequestInit): Promise<Response> {
   const method = (init?.method ?? 'GET').toUpperCase();
@@ -246,6 +249,18 @@ export async function mockFetch(path: string, init?: RequestInit): Promise<Respo
     }));
     return jsonResponse({ success: true, data });
   }
+  const adminUserIdMatch = path.match(ADMIN_USER_ID_RE);
+  if (adminUserIdMatch && method === 'DELETE') {
+    const id = Number(adminUserIdMatch[1]);
+    if (id === me.id) {
+      return jsonResponse({ success: false, error: 'You cannot delete your own account' }, 400);
+    }
+    if (!members.some((m) => m.id === id)) {
+      return jsonResponse({ success: false, error: 'User not found' }, 404);
+    }
+    members = members.filter((m) => m.id !== id);
+    return jsonResponse({ success: true, data: null });
+  }
   if (path === '/api/members' && method === 'POST') {
     const body = parseBody(init);
     const member = {
@@ -284,6 +299,18 @@ export async function mockFetch(path: string, init?: RequestInit): Promise<Respo
 
   if (path === '/api/admin/households' && method === 'GET') {
     return jsonResponse({ success: true, data: households });
+  }
+  if (path === '/api/admin/households' && method === 'POST') {
+    const body = parseBody(init);
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    if (!name) return jsonResponse({ success: false, error: 'Missing required fields' }, 400);
+    if (households.some((h) => h.name === name)) {
+      return jsonResponse({ success: false, error: `A household named "${name}" already exists` }, 409);
+    }
+    const timezone = typeof body.timezone === 'string' && body.timezone ? body.timezone : 'UTC';
+    const household: MockHousehold = { id: nextHouseholdId++, name };
+    households = [...households, household];
+    return jsonResponse({ success: true, data: { ...household, timezone } }, 201);
   }
   if (path === '/api/admin/members' && method === 'POST') {
     const body = parseBody(init);

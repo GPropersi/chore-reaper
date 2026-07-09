@@ -187,6 +187,7 @@ function AdminRoute({
       isAdmin={me.isAdmin}
       memberships={me.memberships}
       currentHouseholdId={me.currentHouseholdId}
+      currentUserId={me.id}
       onSwitchHousehold={onSwitchHousehold}
     />
   );

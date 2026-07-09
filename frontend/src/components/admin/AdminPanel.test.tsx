@@ -24,6 +24,7 @@ const noRoomsProps = {
   isAdmin: false,
   memberships: [{ householdId: 1, householdName: 'The Smith House' }],
   currentHouseholdId: 1,
+  currentUserId: 1,
   onSwitchHousehold: () => {},
 };
 
@@ -48,6 +49,9 @@ beforeEach(() => {
         return jsonResponse({ success: true, data: [] });
       }
       if (url === '/api/admin/users' && method === 'GET') {
+        return jsonResponse({ success: true, data: [] });
+      }
+      if (url === '/api/admin/households' && method === 'GET') {
         return jsonResponse({ success: true, data: [] });
       }
       throw new Error(`Unhandled fetch: ${method} ${url}`);
@@ -185,6 +189,9 @@ describe('AdminPanel', () => {
         if (url === '/api/admin/join-requests' && method === 'GET') {
           return jsonResponse({ success: true, data: [] });
         }
+        if (url === '/api/admin/households' && method === 'GET') {
+          return jsonResponse({ success: true, data: [] });
+        }
         throw new Error(`Unhandled fetch: ${method} ${url}`);
       }),
     );
@@ -192,6 +199,108 @@ describe('AdminPanel', () => {
     render(<AdminPanel {...noRoomsProps} isAdmin={true} />);
 
     expect(await screen.findByRole('heading', { name: 'Users' })).toBeInTheDocument();
+  });
+
+  it('hides the Delete button on the current admin own row but shows it for other users', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        const method = init?.method ?? 'GET';
+        if (url === '/api/members' && method === 'GET') {
+          return jsonResponse({ success: true, data: initialMembers });
+        }
+        if (url === '/api/admin/users' && method === 'GET') {
+          return jsonResponse({
+            success: true,
+            data: [
+              {
+                id: 1,
+                email: 'admin@example.com',
+                timezone: 'America/Chicago',
+                isAdmin: true,
+                households: [{ id: 1, name: 'Household A' }],
+              },
+              {
+                id: 2,
+                email: 'member@example.com',
+                timezone: null,
+                isAdmin: false,
+                households: [{ id: 1, name: 'Household A' }],
+              },
+            ],
+          });
+        }
+        if (url === '/api/admin/join-requests' && method === 'GET') {
+          return jsonResponse({ success: true, data: [] });
+        }
+        if (url === '/api/admin/households' && method === 'GET') {
+          return jsonResponse({ success: true, data: [] });
+        }
+        throw new Error(`Unhandled fetch: ${method} ${url}`);
+      }),
+    );
+
+    render(<AdminPanel {...noRoomsProps} isAdmin={true} currentUserId={1} />);
+
+    const list = await screen.findByTestId('admin-user-list');
+    const adminRow = within(list).getByText('admin@example.com').closest('li')!;
+    const memberRow = within(list).getByText('member@example.com').closest('li')!;
+    expect(within(adminRow).queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+    expect(within(memberRow).getByRole('button', { name: 'Delete' })).toBeInTheDocument();
+  });
+
+  it('flows delete-user through ConfirmDialog before calling DELETE /api/admin/users/:id', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        const method = init?.method ?? 'GET';
+        if (url === '/api/members' && method === 'GET') {
+          return jsonResponse({ success: true, data: initialMembers });
+        }
+        if (url === '/api/admin/users' && method === 'GET') {
+          return jsonResponse({
+            success: true,
+            data: [
+              {
+                id: 2,
+                email: 'member@example.com',
+                timezone: null,
+                isAdmin: false,
+                households: [{ id: 1, name: 'Household A' }],
+              },
+            ],
+          });
+        }
+        if (url === '/api/admin/join-requests' && method === 'GET') {
+          return jsonResponse({ success: true, data: [] });
+        }
+        if (url === '/api/admin/users/2' && method === 'DELETE') {
+          return jsonResponse({ success: true, data: null });
+        }
+        if (url === '/api/admin/households' && method === 'GET') {
+          return jsonResponse({ success: true, data: [] });
+        }
+        throw new Error(`Unhandled fetch: ${method} ${url}`);
+      }),
+    );
+
+    const user = userEvent.setup();
+    render(<AdminPanel {...noRoomsProps} isAdmin={true} currentUserId={1} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Delete' }));
+    const fetchMock = vi.mocked(fetch);
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(false);
+
+    await user.click(screen.getByTestId('confirm-dialog-confirm'));
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(true);
+    });
+    expect(
+      within(screen.getByTestId('admin-user-list')).queryByText('member@example.com'),
+    ).not.toBeInTheDocument();
   });
 
   it('does not render (or fetch) the Users directory when isAdmin is false', async () => {
@@ -373,5 +482,126 @@ describe('AdminPanel', () => {
     );
     expect(requestCall).toBeDefined();
     expect(JSON.parse(requestCall![1]!.body as string)).toEqual({ email: 'brand-new@example.com' });
+  });
+
+  it('renders the Households directory when isAdmin is true', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        const method = init?.method ?? 'GET';
+        if (url === '/api/members' && method === 'GET') {
+          return jsonResponse({ success: true, data: initialMembers });
+        }
+        if (url === '/api/admin/users' && method === 'GET') {
+          return jsonResponse({ success: true, data: [] });
+        }
+        if (url === '/api/admin/join-requests' && method === 'GET') {
+          return jsonResponse({ success: true, data: [] });
+        }
+        if (url === '/api/admin/households' && method === 'GET') {
+          return jsonResponse({ success: true, data: [{ id: 1, name: 'The Smith House' }] });
+        }
+        throw new Error(`Unhandled fetch: ${method} ${url}`);
+      }),
+    );
+
+    render(<AdminPanel {...noRoomsProps} isAdmin={true} />);
+
+    expect(await screen.findByRole('heading', { name: 'Households' })).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId('admin-household-list')).getByText('The Smith House'),
+    ).toBeInTheDocument();
+  });
+
+  it('creates a household via the Households directory and appends it to the list', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        const method = init?.method ?? 'GET';
+        if (url === '/api/members' && method === 'GET') {
+          return jsonResponse({ success: true, data: initialMembers });
+        }
+        if (url === '/api/admin/users' && method === 'GET') {
+          return jsonResponse({ success: true, data: [] });
+        }
+        if (url === '/api/admin/join-requests' && method === 'GET') {
+          return jsonResponse({ success: true, data: [] });
+        }
+        if (url === '/api/admin/households' && method === 'GET') {
+          return jsonResponse({ success: true, data: [] });
+        }
+        if (url === '/api/admin/households' && method === 'POST') {
+          const body = JSON.parse(init!.body as string);
+          return jsonResponse({ success: true, data: { id: 3, ...body } });
+        }
+        throw new Error(`Unhandled fetch: ${method} ${url}`);
+      }),
+    );
+
+    const user = userEvent.setup();
+    render(<AdminPanel {...noRoomsProps} isAdmin={true} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Create Household' }));
+    const modal = screen.getByTestId('create-household-modal-backdrop');
+    await user.type(within(modal).getByLabelText('Name'), 'The Jones House');
+    await user.click(within(modal).getByRole('button', { name: 'Save' }));
+
+    expect(
+      await within(screen.getByTestId('admin-household-list')).findByText('The Jones House'),
+    ).toBeInTheDocument();
+    const fetchMock = vi.mocked(fetch);
+    const postCall = fetchMock.mock.calls.find(
+      ([input, init]) => input.toString() === '/api/admin/households' && init?.method === 'POST',
+    );
+    expect(postCall).toBeDefined();
+    expect(JSON.parse(postCall![1]!.body as string)).toMatchObject({
+      name: 'The Jones House',
+      timezone: 'UTC',
+    });
+  });
+
+  it('shows a duplicate-name error from Create Household without closing the modal', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        const method = init?.method ?? 'GET';
+        if (url === '/api/members' && method === 'GET') {
+          return jsonResponse({ success: true, data: initialMembers });
+        }
+        if (url === '/api/admin/users' && method === 'GET') {
+          return jsonResponse({ success: true, data: [] });
+        }
+        if (url === '/api/admin/join-requests' && method === 'GET') {
+          return jsonResponse({ success: true, data: [] });
+        }
+        if (url === '/api/admin/households' && method === 'GET') {
+          return jsonResponse({ success: true, data: [{ id: 1, name: 'The Smith House' }] });
+        }
+        if (url === '/api/admin/households' && method === 'POST') {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({ success: false, error: 'A household named "The Smith House" already exists' }),
+              { status: 409, headers: { 'content-type': 'application/json' } },
+            ),
+          );
+        }
+        throw new Error(`Unhandled fetch: ${method} ${url}`);
+      }),
+    );
+
+    const user = userEvent.setup();
+    render(<AdminPanel {...noRoomsProps} isAdmin={true} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Create Household' }));
+    const modal = screen.getByTestId('create-household-modal-backdrop');
+    await user.type(within(modal).getByLabelText('Name'), 'The Smith House');
+    await user.click(within(modal).getByRole('button', { name: 'Save' }));
+
+    expect(
+      await within(modal).findByText('A household named "The Smith House" already exists'),
+    ).toBeInTheDocument();
   });
 });

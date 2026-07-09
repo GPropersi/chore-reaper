@@ -1,0 +1,69 @@
+import { useEffect, useState } from 'react';
+import type { HouseholdListItem, ApiResponse } from '@customTypes/SharedTypes';
+import { apiFetch } from '../../utils/api';
+import CreateHouseholdModal, { type CreateHouseholdInput } from './CreateHouseholdModal';
+
+// Self-contained like JoinRequestsSection, unlike UsersDirectory/AddUserModal
+// (which AdminPanel orchestrates externally) — creating a household never
+// needs to update any of AdminPanel's own state (the Members list, warnings,
+// etc.), so there's nothing for a parent to coordinate.
+export default function HouseholdsDirectory() {
+  const [households, setHouseholds] = useState<HouseholdListItem[]>([]);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    apiFetch('/api/admin/households')
+      .then((res) => res.json())
+      .then((body: ApiResponse<HouseholdListItem[]>) => setHouseholds(body.data ?? []));
+  }, []);
+
+  async function handleCreate(input: CreateHouseholdInput) {
+    const res = await apiFetch('/api/admin/households', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    const body = (await res.json()) as ApiResponse<HouseholdListItem>;
+    if (body.success && body.data) {
+      setHouseholds((prev) => [...prev, body.data as HouseholdListItem]);
+      setError(null);
+      setIsCreateOpen(false);
+    } else {
+      setError(body.error ?? 'Could not create household');
+    }
+  }
+
+  return (
+    <div className="mt-8">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-white text-lg font-semibold">Households</h2>
+        <button
+          type="button"
+          onClick={() => {
+            setError(null);
+            setIsCreateOpen(true);
+          }}
+          className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 px-4 rounded-lg"
+        >
+          Create Household
+        </button>
+      </div>
+
+      <ul className="space-y-2" data-testid="admin-household-list">
+        {households.map((household) => (
+          <li
+            key={household.id}
+            className="flex justify-between items-center bg-gray-800 rounded-lg px-4 py-2"
+          >
+            <p className="text-white text-sm">{household.name}</p>
+          </li>
+        ))}
+      </ul>
+
+      {isCreateOpen && (
+        <CreateHouseholdModal onSubmit={handleCreate} onCancel={() => setIsCreateOpen(false)} error={error} />
+      )}
+    </div>
+  );
+}

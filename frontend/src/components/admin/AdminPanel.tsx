@@ -8,6 +8,7 @@ import RoomsSection from './RoomsSection';
 import HouseholdSection from './HouseholdSection';
 import JoinRequestsSection from './JoinRequestsSection';
 import UsersDirectory from './UsersDirectory';
+import HouseholdsDirectory from './HouseholdsDirectory';
 import { apiFetch } from '../../utils/api';
 
 export type Member = {
@@ -35,6 +36,7 @@ type AdminPanelProps = {
   isAdmin: boolean;
   memberships: Membership[];
   currentHouseholdId: number;
+  currentUserId: number;
   onSwitchHousehold: (householdId: number) => void;
 };
 
@@ -48,6 +50,7 @@ export default function AdminPanel({
   isAdmin,
   memberships,
   currentHouseholdId,
+  currentUserId,
   onSwitchHousehold,
 }: AdminPanelProps) {
   const [members, setMembers] = useState<Member[]>([]);
@@ -226,7 +229,9 @@ export default function AdminPanel({
               if (member.householdId === householdId) setMembers((prev) => [...prev, member]);
             }}
           />
+          <HouseholdsDirectory />
           <UsersDirectory
+            currentUserId={currentUserId}
             headerAction={
               <button
                 type="button"

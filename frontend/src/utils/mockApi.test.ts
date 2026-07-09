@@ -181,6 +181,70 @@ describe('mockFetch: /api/admin/users', () => {
   });
 });
 
+describe('mockFetch: POST /api/admin/households', () => {
+  it('creates a household, defaulting timezone to UTC, and it appears in a subsequent GET', async () => {
+    const res = await mockFetch('/api/admin/households', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Preview Household C' }),
+    });
+    expect(res.status).toBe(201);
+    const body = await json<{ data: { id: number; name: string; timezone: string } }>(res);
+    expect(body.data).toMatchObject({ name: 'Preview Household C', timezone: 'UTC' });
+
+    const listRes = await json<{ data: { name: string }[] }>(await mockFetch('/api/admin/households'));
+    expect(listRes.data.map((h) => h.name)).toContain('Preview Household C');
+  });
+
+  it('honors a caller-supplied timezone', async () => {
+    const res = await mockFetch('/api/admin/households', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Preview Household C', timezone: 'America/Chicago' }),
+    });
+    const body = await json<{ data: { timezone: string } }>(res);
+    expect(body.data.timezone).toBe('America/Chicago');
+  });
+
+  it('returns 400 when name is missing', async () => {
+    const res = await mockFetch('/api/admin/households', { method: 'POST', body: JSON.stringify({}) });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 409 for a duplicate name', async () => {
+    const res = await mockFetch('/api/admin/households', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Preview Household' }),
+    });
+    expect(res.status).toBe(409);
+  });
+});
+
+describe('mockFetch: DELETE /api/admin/users/:id', () => {
+  it('removes the user so they no longer appear in /api/members or /api/admin/users', async () => {
+    const before = await json<{ data: { id: number; email: string }[] }>(await mockFetch('/api/members'));
+    const target = before.data.find((m) => m.email !== 'preview@example.com')!;
+
+    const res = await mockFetch(`/api/admin/users/${target.id}`, { method: 'DELETE' });
+    expect(res.status).toBe(200);
+
+    const members = await json<{ data: { id: number }[] }>(await mockFetch('/api/members'));
+    expect(members.data.map((m) => m.id)).not.toContain(target.id);
+    const users = await json<{ data: { id: number }[] }>(await mockFetch('/api/admin/users'));
+    expect(users.data.map((u) => u.id)).not.toContain(target.id);
+  });
+
+  it('returns 400 when targeting the current admin own account', async () => {
+    const me = await json<{ id: number }>(await mockFetch('/api/me'));
+
+    const res = await mockFetch(`/api/admin/users/${me.id}`, { method: 'DELETE' });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 404 for an unknown id', async () => {
+    const res = await mockFetch('/api/admin/users/999999', { method: 'DELETE' });
+    expect(res.status).toBe(404);
+  });
+});
+
 describe('mockFetch: /api/rooms', () => {
   it('GET returns a non-empty seeded list', async () => {
     const res = await mockFetch('/api/rooms');

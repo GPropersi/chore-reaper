@@ -44,6 +44,12 @@ export interface HouseholdListItem {
   name: string;
 }
 
+export interface Household {
+  id: number;
+  name: string;
+  timezone: string;
+}
+
 export interface JoinRequest {
   id: number;
   householdId: number;
