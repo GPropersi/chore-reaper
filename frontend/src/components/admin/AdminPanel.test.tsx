@@ -212,6 +212,16 @@ describe('AdminPanel', () => {
     expect(await screen.findByRole('button', { name: 'Add User' })).toBeInTheDocument();
   });
 
+  it('renders the Add User button next to the Users heading, not the Members heading', async () => {
+    render(<AdminPanel {...noRoomsProps} isAdmin={true} />);
+    const usersHeading = await screen.findByRole('heading', { name: 'Users' });
+    const addUserButton = screen.getByRole('button', { name: 'Add User' });
+
+    expect(usersHeading.parentElement).toContainElement(addUserButton);
+    const membersHeading = screen.getByRole('heading', { name: 'Members' });
+    expect(membersHeading.parentElement).not.toContainElement(addUserButton);
+  });
+
   it('submits the Add User form to POST /api/admin/members and appends to the list for the current household', async () => {
     vi.stubGlobal(
       'fetch',

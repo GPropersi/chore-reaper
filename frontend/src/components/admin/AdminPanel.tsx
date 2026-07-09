@@ -159,24 +159,13 @@ export default function AdminPanel({
 
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-white text-lg font-semibold">Members</h2>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={openAddMember}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 px-4 rounded-lg"
-          >
-            Add Member
-          </button>
-          {isAdmin && (
-            <button
-              type="button"
-              onClick={() => setIsAddUserOpen(true)}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 px-4 rounded-lg"
-            >
-              Add User
-            </button>
-          )}
-        </div>
+        <button
+          type="button"
+          onClick={openAddMember}
+          className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 px-4 rounded-lg"
+        >
+          Add Member
+        </button>
       </div>
 
       <ul className="space-y-2" data-testid="member-list">
@@ -237,7 +226,17 @@ export default function AdminPanel({
               if (member.householdId === householdId) setMembers((prev) => [...prev, member]);
             }}
           />
-          <UsersDirectory />
+          <UsersDirectory
+            headerAction={
+              <button
+                type="button"
+                onClick={() => setIsAddUserOpen(true)}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 px-4 rounded-lg"
+              >
+                Add User
+              </button>
+            }
+          />
         </>
       )}
     </div>

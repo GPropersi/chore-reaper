@@ -1,8 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import type { AdminUser, ApiResponse } from '@customTypes/SharedTypes';
 import { apiFetch } from '../../utils/api';
 
-export default function UsersDirectory() {
+type UsersDirectoryProps = {
+  headerAction?: ReactNode;
+};
+
+export default function UsersDirectory({ headerAction }: UsersDirectoryProps) {
   const [users, setUsers] = useState<AdminUser[]>([]);
 
   useEffect(() => {
@@ -13,7 +17,10 @@ export default function UsersDirectory() {
 
   return (
     <div className="mt-8">
-      <h2 className="text-white text-lg font-semibold mb-4">Users</h2>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-white text-lg font-semibold">Users</h2>
+        {headerAction}
+      </div>
 
       <ul className="space-y-2" data-testid="admin-user-list">
         {users.map((user) => (
