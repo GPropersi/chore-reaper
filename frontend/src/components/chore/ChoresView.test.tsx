@@ -70,7 +70,14 @@ describe('ChoresView', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date('2026-07-01T12:00:00.000Z'));
 
-    render(<ChoresView householdTimezone="Pacific/Kiritimati" rooms={mockRooms} />);
+    render(
+      <ChoresView
+        householdTimezone="Pacific/Kiritimati"
+        rooms={mockRooms}
+        swipeStyle="ios"
+        onSwipeStyleChange={vi.fn()}
+      />,
+    );
 
     await vi.waitFor(() => expect(screen.getByText('Vacuum')).toBeInTheDocument());
     expect(screen.getByText('Dishes')).toBeInTheDocument();
@@ -84,9 +91,10 @@ describe('ChoresView', () => {
     render(
       <ChoresView
         householdTimezone="Pacific/Kiritimati"
-
         selectedRoom="2"
         rooms={mockRooms}
+        swipeStyle="ios"
+        onSwipeStyleChange={vi.fn()}
       />,
     );
 
@@ -98,7 +106,14 @@ describe('ChoresView', () => {
     stubChoresFetch();
     vi.mocked(getDeviceTimezone).mockReturnValue('Asia/Tokyo');
 
-    render(<ChoresView householdTimezone="America/New_York" rooms={mockRooms} />);
+    render(
+      <ChoresView
+        householdTimezone="America/New_York"
+        rooms={mockRooms}
+        swipeStyle="ios"
+        onSwipeStyleChange={vi.fn()}
+      />,
+    );
 
     await waitFor(() => expect(screen.getByText('Vacuum')).toBeInTheDocument());
     expect(screen.getByTestId('timezone-mismatch-notice')).toHaveTextContent(
@@ -110,7 +125,14 @@ describe('ChoresView', () => {
     stubChoresFetch();
     vi.mocked(getDeviceTimezone).mockReturnValue('America/New_York');
 
-    render(<ChoresView householdTimezone="America/New_York" rooms={mockRooms} />);
+    render(
+      <ChoresView
+        householdTimezone="America/New_York"
+        rooms={mockRooms}
+        swipeStyle="ios"
+        onSwipeStyleChange={vi.fn()}
+      />,
+    );
 
     await waitFor(() => expect(screen.getByText('Vacuum')).toBeInTheDocument());
     expect(screen.queryByTestId('timezone-mismatch-notice')).not.toBeInTheDocument();
@@ -142,7 +164,9 @@ describe('ChoresView', () => {
       }),
     );
 
-    render(<ChoresView householdTimezone="UTC" rooms={mockRooms} />);
+    render(
+      <ChoresView householdTimezone="UTC" rooms={mockRooms} swipeStyle="ios" onSwipeStyleChange={vi.fn()} />,
+    );
     await waitFor(() => expect(screen.getByText('Vacuum')).toBeInTheDocument());
 
     await user.click(screen.getByRole('button', { name: /add chore/i }));
@@ -184,7 +208,9 @@ describe('ChoresView', () => {
       }),
     );
 
-    render(<ChoresView householdTimezone="UTC" rooms={mockRooms} />);
+    render(
+      <ChoresView householdTimezone="UTC" rooms={mockRooms} swipeStyle="ios" onSwipeStyleChange={vi.fn()} />,
+    );
     await waitFor(() => expect(screen.getByText('Vacuum')).toBeInTheDocument());
 
     await user.click(screen.getAllByLabelText('Edit chore')[0]);
@@ -220,7 +246,9 @@ describe('ChoresView', () => {
       }),
     );
 
-    render(<ChoresView householdTimezone="UTC" rooms={mockRooms} />);
+    render(
+      <ChoresView householdTimezone="UTC" rooms={mockRooms} swipeStyle="ios" onSwipeStyleChange={vi.fn()} />,
+    );
     await waitFor(() => expect(screen.getByText('Vacuum')).toBeInTheDocument());
 
     await user.click(screen.getAllByLabelText('Edit chore')[0]);
@@ -249,7 +277,9 @@ describe('ChoresView', () => {
       }),
     );
 
-    render(<ChoresView householdTimezone="UTC" rooms={mockRooms} />);
+    render(
+      <ChoresView householdTimezone="UTC" rooms={mockRooms} swipeStyle="ios" onSwipeStyleChange={vi.fn()} />,
+    );
     await waitFor(() => expect(screen.getByText('Vacuum')).toBeInTheDocument());
 
     const vacuumBar = screen.getByText('Vacuum').closest('[data-testid="chore-bar"]') as HTMLElement;
@@ -275,7 +305,9 @@ describe('ChoresView', () => {
       }),
     );
 
-    render(<ChoresView householdTimezone="UTC" rooms={mockRooms} />);
+    render(
+      <ChoresView householdTimezone="UTC" rooms={mockRooms} swipeStyle="ios" onSwipeStyleChange={vi.fn()} />,
+    );
     await waitFor(() => expect(screen.getByText('Vacuum')).toBeInTheDocument());
 
     const vacuumRow = screen.getByText('Vacuum').closest('[data-testid="chore-row"]') as HTMLElement;
@@ -330,7 +362,15 @@ describe('ChoresView', () => {
     vi.stubGlobal('fetch', fetchImpl);
     const testOutbox = createOutbox(fetchImpl);
 
-    render(<ChoresView householdTimezone="UTC" outbox={testOutbox} rooms={mockRooms} />);
+    render(
+      <ChoresView
+        householdTimezone="UTC"
+        outbox={testOutbox}
+        rooms={mockRooms}
+        swipeStyle="ios"
+        onSwipeStyleChange={vi.fn()}
+      />,
+    );
     await waitFor(() => expect(screen.getByText('Vacuum')).toBeInTheDocument());
 
     const vacuumBar = screen.getByText('Vacuum').closest('[data-testid="chore-bar"]') as HTMLElement;
@@ -359,7 +399,9 @@ describe('ChoresView', () => {
       vi.fn(() => Promise.reject(new Error('network down'))),
     );
 
-    render(<ChoresView householdTimezone="UTC" rooms={mockRooms} />);
+    render(
+      <ChoresView householdTimezone="UTC" rooms={mockRooms} swipeStyle="ios" onSwipeStyleChange={vi.fn()} />,
+    );
 
     await waitFor(() => expect(screen.getByText('Vacuum')).toBeInTheDocument());
     expect(screen.getByTestId('status-banner')).toBeInTheDocument();
@@ -375,7 +417,9 @@ describe('ChoresView', () => {
       }),
     );
 
-    render(<ChoresView householdTimezone="UTC" rooms={mockRooms} />);
+    render(
+      <ChoresView householdTimezone="UTC" rooms={mockRooms} swipeStyle="ios" onSwipeStyleChange={vi.fn()} />,
+    );
 
     await waitFor(() => expect(screen.getByText('Vacuum')).toBeInTheDocument());
     expect(screen.getByTestId('status-banner')).toBeInTheDocument();
@@ -389,7 +433,9 @@ describe('ChoresView', () => {
       vi.fn(() => jsonResponse({ success: true, data: mockChores })),
     );
 
-    render(<ChoresView householdTimezone="UTC" rooms={mockRooms} />);
+    render(
+      <ChoresView householdTimezone="UTC" rooms={mockRooms} swipeStyle="ios" onSwipeStyleChange={vi.fn()} />,
+    );
     await waitFor(() => expect(screen.getByTestId('status-banner')).toBeInTheDocument());
 
     vi.stubGlobal('navigator', { ...navigator, onLine: true });
@@ -420,11 +466,55 @@ describe('ChoresView', () => {
       },
     });
 
-    render(<ChoresView householdTimezone="UTC" outbox={testOutbox} rooms={mockRooms} />);
+    render(
+      <ChoresView
+        householdTimezone="UTC"
+        outbox={testOutbox}
+        rooms={mockRooms}
+        swipeStyle="ios"
+        onSwipeStyleChange={vi.fn()}
+      />,
+    );
 
     await waitFor(() => expect(screen.getByText('Vacuum')).toBeInTheDocument());
     expect(screen.getByText('Mop Floors')).toBeInTheDocument();
 
     testOutbox.dispose();
+  });
+
+  it('opens Settings from the gear icon and reports a swipe-style change up to the caller', async () => {
+    const user = userEvent.setup();
+    const onSwipeStyleChange = vi.fn();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        const method = init?.method ?? 'GET';
+        if (url === '/api/chores' && method === 'GET') {
+          return jsonResponse({ success: true, data: mockChores });
+        }
+        if (url === '/api/me/swipe-style' && method === 'PATCH') {
+          return jsonResponse({ success: true, data: { swipeStyle: 'android' } });
+        }
+        throw new Error(`Unhandled fetch: ${method} ${url}`);
+      }),
+    );
+
+    render(
+      <ChoresView
+        householdTimezone="UTC"
+        rooms={mockRooms}
+        swipeStyle="ios"
+        onSwipeStyleChange={onSwipeStyleChange}
+      />,
+    );
+    await waitFor(() => expect(screen.getByText('Vacuum')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'Settings' }));
+    expect(screen.getByTestId('settings-modal-backdrop')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Android/ }));
+
+    expect(onSwipeStyleChange).toHaveBeenCalledWith('android');
   });
 });

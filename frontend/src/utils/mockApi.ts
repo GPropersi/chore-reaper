@@ -56,6 +56,7 @@ function seedMe() {
     email: 'preview@example.com',
     timezone: 'America/Chicago',
     isAdmin: true,
+    swipeStyle: 'ios' as 'ios' | 'android',
     memberships: [
       {
         householdId: 1,
@@ -190,6 +191,15 @@ export async function mockFetch(path: string, init?: RequestInit): Promise<Respo
 
   if (path === '/api/me' && method === 'GET') {
     return jsonResponse(me);
+  }
+  if (path === '/api/me/swipe-style' && method === 'PATCH') {
+    const body = parseBody(init);
+    const swipeStyle = body.swipeStyle;
+    if (swipeStyle !== 'ios' && swipeStyle !== 'android') {
+      return jsonResponse({ success: false, error: 'Invalid swipe style' }, 400);
+    }
+    me = { ...me, swipeStyle };
+    return jsonResponse({ success: true, data: { swipeStyle } });
   }
 
   if (path === '/api/chores' && method === 'GET') {

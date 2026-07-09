@@ -13,6 +13,8 @@ export interface Chore {
   longTermTask?: boolean;
 }
 
+export type SwipeStyle = 'ios' | 'android';
+
 export interface Room {
   id: number;
   householdId: number;

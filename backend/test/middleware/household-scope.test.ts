@@ -34,6 +34,7 @@ function appWithStubEmail(email: string) {
       householdId: c.var.householdId,
       isAdmin: c.var.isAdmin,
       timezone: c.var.timezone,
+      swipeStyle: c.var.swipeStyle,
     }),
   );
   return stubApp;
@@ -81,7 +82,13 @@ describe('householdScope', () => {
     const res = await appWithStubEmail('member-a@example.com').request('/whoami', {}, env);
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ userId: 3, householdId: 1, isAdmin: false, timezone: null });
+    expect(await res.json()).toEqual({
+      userId: 3,
+      householdId: 1,
+      isAdmin: false,
+      timezone: null,
+      swipeStyle: 'ios',
+    });
   });
 
   it('rejects with 401 (not 500) when the verified email has no matching users row', async () => {

@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
-import type { Chore, Room } from '@customTypes/SharedTypes';
+import { Settings } from 'lucide-react';
+import type { Chore, Room, SwipeStyle } from '@customTypes/SharedTypes';
 import { useMidnightClock } from '../../hooks/useMidnightClock';
 import { useRoomFilter } from '../../hooks/useRoomFilter';
 import { orderChores } from '@utils/choreSort';
 import ChoreList from './ChoreList';
 import ChoreFormModal from '../form/ChoreFormModal';
 import ConfirmDialog from '../common/ConfirmDialog';
+import SettingsModal from '../settings/SettingsModal';
 import StatusBanner from '../common/StatusBanner';
 import { useOutbox } from '../../outbox/useOutbox';
 import type { ChorePayload, FlushResult, Outbox, OutboxEntry } from '../../outbox/outbox';
@@ -28,6 +30,8 @@ type ChoresViewProps = {
   outbox?: Outbox;
   selectedRoom?: string;
   rooms: Room[];
+  swipeStyle: SwipeStyle;
+  onSwipeStyleChange: (swipeStyle: SwipeStyle) => void;
 };
 
 function toChorePayload(input: Omit<Chore, 'id'>): ChorePayload {
@@ -87,6 +91,8 @@ export default function ChoresView({
   outbox: outboxProp,
   selectedRoom = 'all',
   rooms,
+  swipeStyle,
+  onSwipeStyleChange,
 }: ChoresViewProps) {
   const today = useMidnightClock(householdTimezone);
   // Chore due dates/ordering run entirely on the household's clock (not the
@@ -97,6 +103,7 @@ export default function ChoresView({
   const timezoneMismatch = deviceTimezone !== householdTimezone;
   const [chores, setChores] = useState<ChoreWithVersion[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [conflictChoreId, setConflictChoreId] = useState<number | null>(null);
 
@@ -236,31 +243,50 @@ export default function ChoresView({
           message="Showing cached data — you're offline or the server is unreachable."
         />
       )}
-      <div className="flex items-center p-4">
+      <div className="p-4">
         {timezoneMismatch && (
-          <span data-testid="timezone-mismatch-notice" className="text-amber-400 text-xs mr-3">
+          <span data-testid="timezone-mismatch-notice" className="block text-amber-400 text-xs mb-3">
             Your device is set to {cityLabel(deviceTimezone)} ({utcOffsetLabel(deviceTimezone)}), but this
             household runs on {cityLabel(householdTimezone)} ({utcOffsetLabel(householdTimezone)}) — due dates
             use the household's clock.
           </span>
         )}
-        <button
-          type="button"
-          onClick={() => setIsAddOpen(true)}
-          className="ml-auto bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 px-4 rounded-lg"
-        >
-          + Add Chore
-        </button>
+        <div className="flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => setIsSettingsOpen(true)}
+            aria-label="Settings"
+            title="Settings"
+            className="h-9 w-9 flex items-center justify-center rounded-lg bg-gray-700 hover:bg-gray-600 text-white"
+          >
+            <Settings size={18} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsAddOpen(true)}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 px-4 rounded-lg"
+          >
+            + Add Chore
+          </button>
+        </div>
       </div>
       <ChoreList
         chores={orderChores(visibleChores, today, householdTimezone)}
         day={today}
         householdTimezone={householdTimezone}
         isSimulating={false}
+        swipeStyle={swipeStyle}
         onComplete={handleComplete}
         onDelete={handleDelete}
         onEdit={setEditingId}
       />
+      {isSettingsOpen && (
+        <SettingsModal
+          swipeStyle={swipeStyle}
+          onSwipeStyleChange={onSwipeStyleChange}
+          onCancel={() => setIsSettingsOpen(false)}
+        />
+      )}
       {isAddOpen && (
         <ChoreFormModal
           mode="add"

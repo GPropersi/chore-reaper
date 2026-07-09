@@ -5,6 +5,7 @@ type UserRow = {
   id: number;
   timezone: string | null;
   is_admin: number;
+  swipe_style: 'ios' | 'android';
 };
 
 type MembershipRow = {
@@ -13,7 +14,7 @@ type MembershipRow = {
 
 export const householdScope = createMiddleware<AppEnv>(async (c, next) => {
   const email = c.var.verifiedEmail;
-  const user = await c.env.DB.prepare('SELECT id, timezone, is_admin FROM users WHERE email = ?')
+  const user = await c.env.DB.prepare('SELECT id, timezone, is_admin, swipe_style FROM users WHERE email = ?')
     .bind(email)
     .first<UserRow>();
 
@@ -60,6 +61,7 @@ export const householdScope = createMiddleware<AppEnv>(async (c, next) => {
   c.set('householdId', membership.household_id);
   c.set('isAdmin', user.is_admin === 1);
   c.set('timezone', user.timezone);
+  c.set('swipeStyle', user.swipe_style);
 
   await next();
 });
