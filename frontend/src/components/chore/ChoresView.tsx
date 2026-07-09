@@ -243,15 +243,15 @@ export default function ChoresView({
           message="Showing cached data — you're offline or the server is unreachable."
         />
       )}
-      <div className="flex items-center p-4">
+      <div className="p-4">
         {timezoneMismatch && (
-          <span data-testid="timezone-mismatch-notice" className="text-amber-400 text-xs mr-3">
+          <span data-testid="timezone-mismatch-notice" className="block text-amber-400 text-xs mb-3">
             Your device is set to {cityLabel(deviceTimezone)} ({utcOffsetLabel(deviceTimezone)}), but this
             household runs on {cityLabel(householdTimezone)} ({utcOffsetLabel(householdTimezone)}) — due dates
             use the household's clock.
           </span>
         )}
-        <div className="ml-auto flex items-center gap-2">
+        <div className="flex items-center justify-end gap-2">
           <button
             type="button"
             onClick={() => setIsSettingsOpen(true)}
