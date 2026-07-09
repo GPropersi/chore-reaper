@@ -83,30 +83,25 @@ Kill the whole process tree the pidfile points at — `npm run dev` → `concurr
 (jwks node process, `wrangler dev`, `vite`). Killing only the top PID can leave those orphaned, so walk
 descendants first.
 
-First, read `.claude/run-dev/dev.pid` directly (Read tool, or plain `cat .claude/run-dev/dev.pid
-2>/dev/null`) to get the literal PID — don't wrap it in `PID=$(cat ...)`. If the file doesn't exist,
-report "not running" and stop here.
+All of `npm run dev`'s descendants (`concurrently` → jwks/wrangler/vite → wrangler-cli → esbuild/workerd)
+stay in one OS process group — confirmed empirically (2026-07-09): killing the *process group* the
+pidfile's PID belongs to takes down every descendant in one shot, no recursive `pgrep` walk needed. This
+also means the whole thing stays substitution-free — every step below is a plain command, reading the
+previous step's plain-text output and splicing the literal value into the next call.
 
-With the literal PID in hand, run the recursive tree-kill. This one still needs `$(pgrep ...)` inside the
-function to enumerate children at each level of the tree — that's genuinely dynamic (the process tree
-isn't knowable in advance), so this specific call will always need a one-time manual approval; that's
-expected and fine since `/run-dev stop` is called far less often than start/health-check commands:
-
-```bash
-if kill -0 <literal PID> 2>/dev/null; then
-  kill_tree() {
-    local p=$1
-    for c in $(pgrep -P "$p" 2>/dev/null); do kill_tree "$c"; done
-    kill "$p" 2>/dev/null
-  }
-  kill_tree <literal PID>
-  sleep 1
-  echo "stopped"
-else
-  echo "pidfile was stale — process already gone"
-fi
-rm -f .claude/run-dev/dev.pid
-```
+1. Read `.claude/run-dev/dev.pid` directly (Read tool, or plain `cat .claude/run-dev/dev.pid
+   2>/dev/null`) to get the literal PID. If the file doesn't exist, report "not running" and stop here.
+2. `kill -0 <literal PID> 2>/dev/null` — if this fails (non-zero exit), the pidfile was stale: report
+   "pidfile was stale — process already gone", `rm -f .claude/run-dev/dev.pid`, and stop here.
+3. `ps -o pgid= -p <literal PID>` — prints the process group ID as plain text. Take that literal number.
+4. Kill the whole group and clean up:
+   ```bash
+   kill -TERM -- -<literal PGID> 2>/dev/null
+   sleep 1
+   kill -KILL -- -<literal PGID> 2>/dev/null || true
+   rm -f .claude/run-dev/dev.pid
+   echo "stopped"
+   ```
 
 Confirm the ports are actually free afterward (`lsof -i :8790 -i :8787 -sTCP:LISTEN -P` should be empty;
 the frontend port varies, don't bother checking it) and report the result to the user in one line —

@@ -245,6 +245,30 @@ describe('mockFetch: DELETE /api/admin/users/:id', () => {
   });
 });
 
+describe('mockFetch: POST /api/admin/users/:id/promote', () => {
+  it('grants admin and reflects it in a subsequent GET /api/admin/users', async () => {
+    const before = await json<{ data: { id: number; email: string; isAdmin: boolean }[] }>(
+      await mockFetch('/api/members'),
+    );
+    const target = before.data.find((m) => !m.isAdmin)!;
+
+    const res = await mockFetch(`/api/admin/users/${target.id}/promote`, { method: 'POST' });
+    expect(res.status).toBe(200);
+    const body = await json<{ data: { id: number; isAdmin: boolean } }>(res);
+    expect(body.data).toMatchObject({ id: target.id, isAdmin: true });
+
+    const users = await json<{ data: { id: number; isAdmin: boolean }[] }>(
+      await mockFetch('/api/admin/users'),
+    );
+    expect(users.data.find((u) => u.id === target.id)?.isAdmin).toBe(true);
+  });
+
+  it('returns 404 for an unknown id', async () => {
+    const res = await mockFetch('/api/admin/users/999999/promote', { method: 'POST' });
+    expect(res.status).toBe(404);
+  });
+});
+
 describe('mockFetch: /api/rooms', () => {
   it('GET returns a non-empty seeded list', async () => {
     const res = await mockFetch('/api/rooms');

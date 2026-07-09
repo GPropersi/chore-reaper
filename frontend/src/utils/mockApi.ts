@@ -183,6 +183,7 @@ const HOUSEHOLD_ID_RE = /^\/api\/households\/(\d+)$/;
 const JOIN_REQUEST_APPROVE_RE = /^\/api\/admin\/join-requests\/(\d+)\/approve$/;
 const JOIN_REQUEST_DENY_RE = /^\/api\/admin\/join-requests\/(\d+)\/deny$/;
 const ADMIN_USER_ID_RE = /^\/api\/admin\/users\/(\d+)$/;
+const ADMIN_USER_PROMOTE_RE = /^\/api\/admin\/users\/(\d+)\/promote$/;
 
 export async function mockFetch(path: string, init?: RequestInit): Promise<Response> {
   const method = (init?.method ?? 'GET').toUpperCase();
@@ -260,6 +261,24 @@ export async function mockFetch(path: string, init?: RequestInit): Promise<Respo
     }
     members = members.filter((m) => m.id !== id);
     return jsonResponse({ success: true, data: null });
+  }
+  const promoteMatch = path.match(ADMIN_USER_PROMOTE_RE);
+  if (promoteMatch && method === 'POST') {
+    const id = Number(promoteMatch[1]);
+    const existing = members.find((m) => m.id === id);
+    if (!existing) return jsonResponse({ success: false, error: 'User not found' }, 404);
+    members = members.map((m) => (m.id === id ? { ...m, isAdmin: true } : m));
+    const updated = members.find((m) => m.id === id)!;
+    const householdName =
+      me.memberships.find((m) => m.householdId === 1)?.householdName ?? 'Preview Household';
+    const data = {
+      id: updated.id,
+      email: updated.email,
+      timezone: updated.timezone,
+      isAdmin: updated.isAdmin,
+      households: [{ id: updated.householdId, name: householdName }],
+    };
+    return jsonResponse({ success: true, data });
   }
   if (path === '/api/members' && method === 'POST') {
     const body = parseBody(init);

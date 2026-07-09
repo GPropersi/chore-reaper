@@ -20,6 +20,11 @@
             "type": "command",
             "command": ".claude/scripts/hook-block-cd-redirect.sh",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": ".claude/scripts/hook-block-cmdsub.sh",
+            "timeout": 10
           }
         ]
       }
