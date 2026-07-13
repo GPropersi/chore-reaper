@@ -40,6 +40,11 @@
             "type": "command",
             "command": ".claude/scripts/hook-block-glob-rm.sh",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": ".claude/scripts/hook-block-brace-expansion.sh",
+            "timeout": 10
           }
         ]
       }

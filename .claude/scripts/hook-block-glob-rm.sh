@@ -1,6 +1,6 @@
 #!/bin/bash
-# PreToolUse hook for the Bash tool: auto-denies `rm` commands whose arguments contain shell glob
-# metacharacters (*, ?, [...]).
+# PreToolUse hook for the Bash tool: auto-denies `rm` invocations whose OWN arguments contain
+# shell glob metacharacters (*, ?, [...]).
 #
 # Confirmed (2026-07-09): Claude Code flags this as "Glob patterns are not allowed in write
 # operations. Please specify an exact file path." Unlike the other gates in this directory, this
@@ -11,8 +11,14 @@
 # run (mockapi-1.txt, mockapi-2.txt, ...) -- reuse one static filename per purpose instead
 # (redirection overwrites by default), and cleanup never needs a wildcard.
 #
-# Reads the PreToolUse hook JSON payload on stdin. Commands without an `rm` + glob-character
-# combination pass through silently (exit 0, no output).
+# Scoped per-segment (not whole-command): normalizes all common shell boundaries (;, &, &&, |,
+# ||, newline) to newlines, then only checks glob characters within segments that actually START
+# with `rm`. An earlier version checked the whole command string, which false-triggered on any rm
+# invocation sharing a compound command with an unrelated * elsewhere (e.g. describing another
+# command's output in an echo on a different line).
+#
+# Reads the PreToolUse hook JSON payload on stdin. Commands without an `rm` segment containing a
+# glob character pass through silently (exit 0, no output).
 
 set -euo pipefail
 
@@ -22,18 +28,19 @@ if [ -z "$cmd" ]; then
   exit 0
 fi
 
-has_rm=no
-if printf '%s' "$cmd" | grep -qE '(^|[;&]|\|\||[[:cntrl:]])[[:space:]]*rm([[:space:]]|$)'; then
-  has_rm=yes
-fi
+normalized="$(printf '%s' "$cmd" | sed -E 's/(&&|\|\||[;&|])/\n/g')"
 
-has_glob=no
-if printf '%s' "$cmd" | grep -qE '[*?]|\[[^]]*\]'; then
-  has_glob=yes
-fi
-
-if [ "$has_rm" = "yes" ] && [ "$has_glob" = "yes" ]; then
-  cat <<'JSON'
+while IFS= read -r seg; do
+  trimmed="$(printf '%s' "$seg" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+  if [ -z "$trimmed" ]; then
+    continue
+  fi
+  if printf '%s' "$trimmed" | grep -qE '^rm([[:space:]]|$)'; then
+    if printf '%s' "$trimmed" | grep -qE '[*?]|\[[^]]*\]'; then
+      cat <<'JSON'
 {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"This command uses a glob pattern (*, ?, or [...]) in an rm argument, which Claude Code always requires manual approval for (\"Glob patterns are not allowed in write operations\") and can't be allow-listed. Rewrite with exact literal paths instead -- either list each file explicitly (rm -f a.txt b.txt c.txt), or better, stop generating incrementally-suffixed filenames in the first place: reuse one static filename per purpose (output redirection overwrites by default), so cleanup never needs a wildcard at all."}}
 JSON
-fi
+      exit 0
+    fi
+  fi
+done <<< "$normalized"

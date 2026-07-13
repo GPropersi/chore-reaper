@@ -51,16 +51,15 @@ If all three already exist, skip straight to Start/Stop.
    disown 2>/dev/null || true
    ```
 
-3. Poll the log (up to ~30s) until both the backend and frontend report ready. Use brace expansion
-   (`{1..30}`), not `$(seq 1 30)` — both loop 30 times, but brace expansion isn't command substitution so
-   it doesn't trip the manual-approval gate:
+3. Poll the log (up to ~30s) until both the backend and frontend report ready. Don't use a shell loop
+   construct for this (`for i in {1..30}` trips the brace-expansion gate; `$(seq 1 30)` trips the
+   command-substitution gate; both are unbypassable manual-approval prompts) — instead, poll at the agent
+   level: issue this plain check as its own Bash call,
    ```bash
-   for i in {1..30}; do
-     grep -q 'Ready on http' .claude/run-dev/dev.log 2>/dev/null && \
-     grep -q 'Local:' .claude/run-dev/dev.log 2>/dev/null && break
-     sleep 1
-   done
+   grep -q 'Ready on http' .claude/run-dev/dev.log 2>/dev/null && grep -q 'Local:' .claude/run-dev/dev.log 2>/dev/null && echo ready || echo "not ready"
    ```
+   and if it prints "not ready", run `sleep 3` as its own call and check again. Repeat up to ~10 times
+   (30s total) before giving up.
 
 4. Extract the actual frontend URL (Vite falls back to another port if 5173 is taken — don't assume it):
    ```bash
