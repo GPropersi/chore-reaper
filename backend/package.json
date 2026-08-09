@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "types": "wrangler types",
+    "typecheck": "tsc --noEmit",
     "test": "npm run types && vitest run",
     "test:watch": "vitest",
     "migrate:local": "wrangler d1 migrations apply DB --local",

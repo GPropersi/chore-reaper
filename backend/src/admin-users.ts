@@ -112,6 +112,7 @@ export async function deleteUser(db: D1Database, userId: number): Promise<Delete
     db.prepare('UPDATE household_members SET invited_by = NULL WHERE invited_by = ?').bind(userId),
     db.prepare('DELETE FROM join_requests WHERE requested_by = ?').bind(userId),
     db.prepare('UPDATE join_requests SET resolved_by = NULL WHERE resolved_by = ?').bind(userId),
+    db.prepare('DELETE FROM user_notifications WHERE user_id = ?').bind(userId),
     db.prepare('DELETE FROM users WHERE id = ?').bind(userId),
   ]);
 

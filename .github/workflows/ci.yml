@@ -61,6 +61,13 @@ jobs:
       - name: Run backend tests
         run: npm run test:backend
 
+      # Must run after "Run backend tests": that step's `npm run test:backend`
+      # invokes `wrangler types`, which generates the gitignored
+      # worker-configuration.d.ts that tsconfig's `include` and the Env
+      # bindings depend on. `tsc --noEmit` alone would fail without it.
+      - name: Typecheck backend
+        run: npm run typecheck --workspace backend
+
   test-frontend:
     name: Frontend tests
     needs: lint
