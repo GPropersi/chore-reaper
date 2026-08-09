@@ -175,6 +175,25 @@ describe('SettingsModal — notifications', () => {
     expect(screen.getByText('Enable push notifications')).toBeInTheDocument();
   });
 
+  it('renders the role=alert error and defaults to the off toggle when the mount GET resolves { success:false } (DD-8)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      makeFetchStub({
+        'GET /api/notifications': () =>
+          jsonResponse({ success: false, error: 'Notifications service unavailable' }),
+      }),
+    );
+    renderModal();
+
+    // The mount effect's else branch (resolved failure, not a thrown rejection)
+    // surfaces body.error verbatim into the same role=alert region.
+    expect(await screen.findByRole('alert')).toHaveTextContent('Notifications service unavailable');
+    const checkbox = screen.getByRole('checkbox');
+    expect(checkbox).not.toBeChecked();
+    expect(checkbox).toHaveAttribute('aria-disabled', 'false');
+    expect(screen.getByText('Enable push notifications')).toBeInTheDocument();
+  });
+
   it('enabling renders the QR + topic straight from the POST /enable response, with no re-fetch (DD-C)', async () => {
     const user = userEvent.setup();
     const fetchMock = makeFetchStub({
