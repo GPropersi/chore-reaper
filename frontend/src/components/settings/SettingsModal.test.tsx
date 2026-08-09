@@ -233,6 +233,42 @@ describe('SettingsModal — notifications', () => {
     expect(screen.getByText('Push notifications enabled')).toBeInTheDocument();
   });
 
+  it('clicking the enabled/locked toggle preventDefaults the native check-flip and never POSTs /enable', async () => {
+    const user = userEvent.setup();
+    const fetchMock = makeFetchStub({
+      'GET /api/notifications': () => jsonResponse({ success: true, data: PROVISIONED }),
+      'POST /api/notifications/enable': () => jsonResponse({ success: true, data: PROVISIONED }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderModal();
+
+    const checkbox = await screen.findByRole('checkbox');
+    await waitFor(() => expect(checkbox).toBeChecked());
+
+    // Capture the native click as it bubbles to document (after React's delegated
+    // handler ran) to confirm the onClick handler cancelled the browser's native
+    // check-toggle. We assert defaultPrevented rather than `.toBeChecked()` because
+    // jsdom does not implement the checkbox activation-behaviour revert on a
+    // cancelled click (its `.checked` reads false even when defaultPrevented is
+    // true), whereas a real browser leaves the box checked — which is exactly what
+    // preventDefault buys us here.
+    let clickDefaultPrevented: boolean | null = null;
+    const captureClick = (event: MouseEvent) => {
+      if (event.target === checkbox) clickDefaultPrevented = event.defaultPrevented;
+    };
+    document.addEventListener('click', captureClick);
+    try {
+      await user.click(checkbox);
+    } finally {
+      document.removeEventListener('click', captureClick);
+    }
+
+    expect(clickDefaultPrevented).toBe(true);
+    const enableCalls = fetchMock.mock.calls.filter(([input]) => String(input).endsWith('/enable'));
+    expect(enableCalls).toHaveLength(0);
+    expect(screen.getByText('Push notifications enabled')).toBeInTheDocument();
+  });
+
   it('shows the transient aria-disabled toggle + "Setting up…" while /enable is in flight (DD-F)', async () => {
     const user = userEvent.setup();
     let resolveEnable!: (r: Response) => void;

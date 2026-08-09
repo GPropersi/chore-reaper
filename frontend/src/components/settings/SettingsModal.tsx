@@ -133,6 +133,15 @@ export default function SettingsModal({ swipeStyle, onSwipeStyleChange, onCancel
     void handleEnable();
   }
 
+  function handleToggleClick(event: React.MouseEvent<HTMLInputElement>) {
+    // First line of defense: while the toggle is locked (enabling in flight or
+    // already enabled — it's a status indicator per DD-5, not native `disabled`
+    // per DD-D), stop the browser's native check-toggle from mutating the DOM
+    // node at all. Without this, a click visually flips the box to unchecked even
+    // though the guarded onChange no-ops and never reverts it.
+    if (toggleChecked) event.preventDefault();
+  }
+
   async function handleEnable() {
     setEnabling(true);
     setNotifError(null);
@@ -259,6 +268,7 @@ export default function SettingsModal({ swipeStyle, onSwipeStyleChange, onCancel
               className="w-[18px] h-[18px] rounded accent-indigo-600"
               checked={toggleChecked}
               aria-disabled={toggleDisabled}
+              onClick={handleToggleClick}
               onChange={handleToggleChange}
             />
             {status.enabled ? 'Push notifications enabled' : 'Enable push notifications'}
