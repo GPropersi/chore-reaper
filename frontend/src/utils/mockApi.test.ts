@@ -53,6 +53,81 @@ describe('mockFetch: PATCH /api/households/:id', () => {
   });
 });
 
+describe('mockFetch: /api/notifications', () => {
+  type Status = {
+    provisioned: boolean;
+    enabled: boolean;
+    server?: string;
+    topic?: string;
+    subscriberToken?: string;
+  };
+
+  it('GET returns the not-provisioned state by default', async () => {
+    const res = await mockFetch('/api/notifications');
+    expect(res.status).toBe(200);
+    const body = await json<{ success: boolean; data: Status }>(res);
+    expect(body.success).toBe(true);
+    expect(body.data).toEqual({ provisioned: false, enabled: false });
+    expect(body.data.subscriberToken).toBeUndefined();
+  });
+
+  it('POST enable provisions, and a subsequent GET reflects the provisioned+enabled state', async () => {
+    const enableRes = await mockFetch('/api/notifications/enable', { method: 'POST' });
+    expect(enableRes.status).toBe(200);
+    const enableBody = await json<{ success: boolean; data: Status }>(enableRes);
+    expect(enableBody.success).toBe(true);
+    expect(enableBody.data.provisioned).toBe(true);
+    expect(enableBody.data.enabled).toBe(true);
+    expect(enableBody.data.server).toBeTruthy();
+    expect(enableBody.data.topic).toBeTruthy();
+    expect(enableBody.data.subscriberToken).toBeTruthy();
+
+    const getBody = await json<{ data: Status }>(await mockFetch('/api/notifications'));
+    expect(getBody.data.provisioned).toBe(true);
+    expect(getBody.data.enabled).toBe(true);
+    expect(getBody.data.topic).toBe(enableBody.data.topic);
+  });
+
+  it('POST test returns 409 before enabling and 200 once enabled', async () => {
+    const before = await mockFetch('/api/notifications/test', { method: 'POST' });
+    expect(before.status).toBe(409);
+
+    await mockFetch('/api/notifications/enable', { method: 'POST' });
+
+    const after = await mockFetch('/api/notifications/test', { method: 'POST' });
+    expect(after.status).toBe(200);
+    const body = await json<{ success: boolean; data: null }>(after);
+    expect(body.success).toBe(true);
+    expect(body.data).toBeNull();
+  });
+
+  it('POST disable soft-offs (enabled=false) while keeping the same token for re-enable', async () => {
+    const enableBody = await json<{ data: Status }>(
+      await mockFetch('/api/notifications/enable', { method: 'POST' }),
+    );
+    const originalToken = enableBody.data.subscriberToken;
+
+    const disableRes = await mockFetch('/api/notifications/disable', { method: 'POST' });
+    expect(disableRes.status).toBe(200);
+    const disableBody = await json<{ data: Status }>(disableRes);
+    expect(disableBody.data).toEqual({ provisioned: true, enabled: false });
+
+    const getBody = await json<{ data: Status }>(await mockFetch('/api/notifications'));
+    expect(getBody.data.enabled).toBe(false);
+    expect(getBody.data.provisioned).toBe(true);
+    // Re-enable preserves the originally provisioned token (no re-provision).
+    const reEnable = await json<{ data: Status }>(
+      await mockFetch('/api/notifications/enable', { method: 'POST' }),
+    );
+    expect(reEnable.data.subscriberToken).toBe(originalToken);
+  });
+
+  it('POST disable returns 409 when notifications were never enabled', async () => {
+    const res = await mockFetch('/api/notifications/disable', { method: 'POST' });
+    expect(res.status).toBe(409);
+  });
+});
+
 describe('mockFetch: /api/chores', () => {
   it('GET returns a non-empty seeded list wrapped in ApiResponse', async () => {
     const res = await mockFetch('/api/chores');
@@ -332,9 +407,18 @@ describe('resetMockData', () => {
     const beforeReset = await json<{ data: ChoreWire[] }>(await mockFetch('/api/chores'));
     expect(beforeReset.data.map((c) => c.name)).toContain('Temporary');
 
+    // Also mutate the notifications seed so the reset is proven to cover it.
+    await mockFetch('/api/notifications/enable', { method: 'POST' });
+    const enabled = await json<{ data: { enabled: boolean } }>(await mockFetch('/api/notifications'));
+    expect(enabled.data.enabled).toBe(true);
+
     resetMockData();
 
     const afterReset = await json<{ data: ChoreWire[] }>(await mockFetch('/api/chores'));
     expect(afterReset.data.map((c) => c.name)).not.toContain('Temporary');
+    const notifs = await json<{ data: { provisioned: boolean; enabled: boolean } }>(
+      await mockFetch('/api/notifications'),
+    );
+    expect(notifs.data).toEqual({ provisioned: false, enabled: false });
   });
 });
