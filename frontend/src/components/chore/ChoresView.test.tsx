@@ -181,7 +181,12 @@ describe('ChoresView', () => {
   });
 
   it('edits an existing chore via the edit-chore form, sending its current version', async () => {
-    const user = userEvent.setup();
+    // Pin the clock so the duration-weighted urgency sort is deterministic:
+    // at this date Vacuum (id 1) outscores Dishes, so getAllByLabelText('Edit
+    // chore')[0] resolves to Vacuum and the PUT hits the stubbed /api/chores/1.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-07-01T12:00:00.000Z'));
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const updatedChore = {
       id: 1,
       name: 'Vacuum Deluxe',
@@ -225,7 +230,12 @@ describe('ChoresView', () => {
   });
 
   it('shows a distinguishable conflict dialog, not a generic error, when an edit hits a stale version', async () => {
-    const user = userEvent.setup();
+    // Pin the clock so the duration-weighted urgency sort is deterministic:
+    // at this date Vacuum (id 1) outscores Dishes, so getAllByLabelText('Edit
+    // chore')[0] resolves to Vacuum and the PUT hits the stubbed /api/chores/1.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-07-01T12:00:00.000Z'));
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     vi.stubGlobal(
       'fetch',
       vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
