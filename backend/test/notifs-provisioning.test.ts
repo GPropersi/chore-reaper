@@ -144,6 +144,17 @@ describe('provisionUser', () => {
     expect(result.status).toBe('failed');
   });
 
+  it('fails closed when person_hash contains an unsafe char (e.g. a path separator)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ ...provisionBody(), person_hash: 'abc/../evil' })),
+    );
+
+    const result = await provisionUser(TEST_ENV, 'user@example.com');
+
+    expect(result.status).toBe('failed');
+  });
+
   it('fails closed when the response body is not JSON', async () => {
     vi.stubGlobal(
       'fetch',

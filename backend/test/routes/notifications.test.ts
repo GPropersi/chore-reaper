@@ -23,12 +23,14 @@ const DEPROVISION_URL = `${NOTIFS_TEST_ENV.NOTIFS_API_BASE_URL}/v1/deprovision`;
 const USER_ID = 1;
 const EMAIL = 'user@example.com';
 
-// The values the provisioning stub hands back on a first-time enable.
-const PROVISION_HASH = 'hash-provisioned';
+// The values the provisioning stub hands back on a first-time enable. The hash
+// mirrors a real 4irl-notifs person_hash: base32, lowercase-alphanumeric (see
+// provisionUser's charset guard) — never a hyphen or path separator.
+const PROVISION_HASH = 'provis10nedhash7';
 const PROVISION_TOKEN = 'tk_provisioned';
 // Distinct values used when a row is pre-seeded — so a re-provision (which would
 // overwrite them) is detectable by the response carrying the wrong hash/token.
-const SEED_HASH = 'hash-seeded';
+const SEED_HASH = 'seededhash234567';
 const SEED_TOKEN = 'tk_seeded';
 
 function jsonResponse(body: unknown, status = 200) {

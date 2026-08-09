@@ -59,6 +59,16 @@ export async function provisionUser(env: ProvisioningEnv, email: string): Promis
     return { status: 'failed', reason };
   }
 
+  // Charset-guard person_hash: it's interpolated into the ntfy topic/outbound URL
+  // and the frontend QR subscribe URL (the topic is a substring, e.g.
+  // `tasktracker-${personHash}-all`), so a `/` or other unsafe char would alter
+  // path segments. Require a safe alphanumeric charset and fail closed otherwise.
+  if (!/^[a-z0-9]+$/i.test(body.person_hash)) {
+    const reason = 'invalid person_hash charset in provisioning response';
+    console.log(JSON.stringify({ event: 'notifs-provision-failed', email, reason }));
+    return { status: 'failed', reason };
+  }
+
   console.log(JSON.stringify({ event: 'notifs-provision', email }));
   // topic_pattern/broadcast_topic are intentionally not parsed — nothing
   // consumes them; the topic is built locally (see ntfy-publish.ts).
