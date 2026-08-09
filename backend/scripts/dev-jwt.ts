@@ -1,6 +1,10 @@
 import { importJWK, SignJWT } from 'jose';
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+// Import URL from node:url (not the ambient global) so this Node/tsx script
+// uses Node's URL class — the global URL resolves to the Cloudflare Workers URL
+// type under this workspace's tsconfig types, which is structurally incompatible
+// with node:url's fileURLToPath parameter (the [Symbol.dispose] iterator diff).
+import { fileURLToPath, URL } from 'node:url';
 
 const [email] = process.argv.slice(2);
 
