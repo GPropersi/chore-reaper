@@ -438,6 +438,60 @@ describe('SettingsModal — notifications', () => {
     await waitFor(() => expect(checkbox).toHaveFocus());
   });
 
+  it('enable fetch rejection surfaces the fallback error and reverts the toggle (catch branch)', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal(
+      'fetch',
+      makeFetchStub({
+        'GET /api/notifications': () => jsonResponse({ success: true, data: NOT_PROVISIONED }),
+        'POST /api/notifications/enable': () => Promise.reject(new Error('network down')),
+      }),
+    );
+    renderModal();
+
+    const checkbox = await screen.findByRole('checkbox');
+    await user.click(checkbox);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not set up notifications');
+    expect(checkbox).not.toBeChecked();
+    expect(checkbox).toHaveAttribute('aria-disabled', 'false');
+  });
+
+  it('Send test fetch rejection surfaces the red fallback error (catch branch)', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal(
+      'fetch',
+      makeFetchStub({
+        'GET /api/notifications': () => jsonResponse({ success: true, data: PROVISIONED }),
+        'POST /api/notifications/test': () => Promise.reject(new Error('network down')),
+      }),
+    );
+    renderModal();
+
+    await user.click(await screen.findByRole('button', { name: 'Send test notification' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Could not send test notification');
+    expect(alert.className).toContain('text-red-400');
+  });
+
+  it('Disable fetch rejection surfaces the fallback error and stays enabled (catch branch)', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal(
+      'fetch',
+      makeFetchStub({
+        'GET /api/notifications': () => jsonResponse({ success: true, data: PROVISIONED }),
+        'POST /api/notifications/disable': () => Promise.reject(new Error('network down')),
+      }),
+    );
+    renderModal();
+
+    await user.click(await screen.findByRole('button', { name: 'Disable' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not disable notifications');
+    expect(screen.getByText('Push notifications enabled')).toBeInTheDocument();
+  });
+
   it('Copy token flips to "Copied!" and reverts after ~2s (DD-23)', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
