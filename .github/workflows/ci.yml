@@ -58,6 +58,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Seed a fixture .dev.vars (same as the e2e job) BEFORE the tests run.
+      # `npm run test:backend` invokes `wrangler types`, which derives the Env
+      # interface from wrangler.toml [vars] PLUS .dev.vars — without it, every
+      # secret binding (ACCESS_AUD, CLOUDFLARE_ACCESS_API_TOKEN, the NOTIFS_*/
+      # NTFY_* keys, etc.) is absent from the generated Env and the "Typecheck
+      # backend" step below fails on code that reads those bindings. Values are
+      # fixtures only; the file is gitignored.
+      - name: Set up local dev vars
+        run: cp backend/.dev.vars.example backend/.dev.vars
+
       - name: Run backend tests
         run: npm run test:backend
 
