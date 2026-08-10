@@ -135,6 +135,42 @@ describe('GET /api/notifications', () => {
   });
 });
 
+describe('GET /api/notifications — auth chain (real mounted accessAuth + resolveUser)', () => {
+  it('returns 401 when no Cf-Access-Jwt-Assertion header is present (accessAuth rejects)', async () => {
+    const res = await app.request('/api/notifications', {}, requestEnv());
+    expect(res.status).toBe(401);
+    const body = (await res.json()) as { success: boolean; error?: string };
+    expect(body.success).toBe(false);
+    expect(body.error).toBe('Unauthorized');
+  });
+
+  it('returns 401 for an Access-verified email with no matching users row (resolveUser rejects)', async () => {
+    // Positive control: the same signing/JWKS path verifies for the SEEDED email
+    // and passes accessAuth (200). This pins the ghost 401 below to resolveUser's
+    // "no users row" branch — accessAuth and resolveUser both emit an identical
+    // { success:false, error:'Unauthorized' } 401 body, so without this control a
+    // JWT-path regression could green the ghost case for the wrong reason.
+    const control = await app.request(
+      '/api/notifications',
+      { headers: await authHeader(EMAIL) },
+      requestEnv(),
+    );
+    expect(control.status).toBe(200);
+
+    // Valid JWT (so accessAuth passes) but an email not seeded into users — the
+    // beforeEach only inserts EMAIL/USER_ID, so resolveUser fails to resolve it.
+    const res = await app.request(
+      '/api/notifications',
+      { headers: await authHeader('ghost@example.com') },
+      requestEnv(),
+    );
+    expect(res.status).toBe(401);
+    const body = (await res.json()) as { success: boolean; error?: string };
+    expect(body.success).toBe(false);
+    expect(body.error).toBe('Unauthorized');
+  });
+});
+
 describe('POST /api/notifications/enable', () => {
   it('provisions on first enable, writes the row, and returns the full status', async () => {
     const fetchMock = stubFetch();
