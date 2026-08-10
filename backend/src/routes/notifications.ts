@@ -1,9 +1,9 @@
 import { Hono } from 'hono';
 import type { ApiResponse, NotificationStatus } from '../../../types/SharedTypes.js';
-import type { BaseEnv } from '../types.js';
 import { getProvisioning, saveProvisioning, setEnabled } from '../notifications.js';
 import { provisionUser } from '../notifs-provisioning.js';
 import { personTopic, publishTest } from '../ntfy-publish.js';
+import type { BaseEnv } from '../types.js';
 
 // Per-user notification routes, mounted behind accessAuth + resolveUser (BaseEnv,
 // the narrower per-user context — notifications are per-user, not household-
