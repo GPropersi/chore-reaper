@@ -4,6 +4,16 @@ import userEvent from '@testing-library/user-event';
 import SettingsModal from './SettingsModal';
 import type { NotificationStatus } from '@customTypes/SharedTypes';
 
+// Stub QRCodeSVG so the exact string it encodes is assertable. The real component
+// bakes `value` into an opaque SVG <path>, so a wrong separator/order/missing-origin
+// regression in the composed subscribe URL would otherwise be invisible; the stub
+// surfaces the `value` prop as a data attribute (DD Test Coverage — QR-content assertion).
+vi.mock('qrcode.react', () => ({
+  QRCodeSVG: ({ value, title }: { value: string; title?: string }) => (
+    <div data-testid="qr-code" data-qr-value={value} title={title} />
+  ),
+}));
+
 function jsonResponse(body: unknown) {
   return Promise.resolve(
     new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } }),
@@ -230,6 +240,22 @@ describe('SettingsModal — notifications', () => {
     expect(checkbox).toHaveAttribute('aria-disabled', 'true');
     expect(checkbox).not.toBeDisabled();
     expect(screen.getByText('Push notifications enabled')).toBeInTheDocument();
+  });
+
+  it('encodes the composed `${server}/${topic}` subscribe URL into the QR code', async () => {
+    vi.stubGlobal(
+      'fetch',
+      makeFetchStub({
+        'GET /api/notifications': () => jsonResponse({ success: true, data: PROVISIONED }),
+      }),
+    );
+    renderModal();
+
+    // subscribeUrl = `${status.server}/${status.topic}` — assert the exact string
+    // (origin + single '/' + topic, in that order) that QRCodeSVG receives, so a
+    // wrong separator/order/missing-origin regression is caught.
+    const qr = await screen.findByTestId('qr-code');
+    expect(qr).toHaveAttribute('data-qr-value', 'https://notifs.4irl.app/tasktracker-abc123-all');
   });
 
   it('a guarded onChange no-ops while the checkbox is aria-disabled (DD-D)', async () => {
