@@ -52,6 +52,17 @@ export interface Household {
   timezone: string;
 }
 
+// Wire shape returned by GET/POST /api/notifications/*. `server`/`topic`/
+// `subscriberToken` are present only when provisioned — the UI uses them to
+// build the ntfy subscribe link/QR and to display the token for manual entry.
+export interface NotificationStatus {
+  provisioned: boolean;
+  enabled: boolean;
+  server?: string;
+  topic?: string;
+  subscriberToken?: string;
+}
+
 export interface JoinRequest {
   id: number;
   householdId: number;

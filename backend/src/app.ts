@@ -5,9 +5,11 @@ import members from './routes/members.js';
 import rooms from './routes/rooms.js';
 import households from './routes/households.js';
 import admin from './routes/admin.js';
+import notifications from './routes/notifications.js';
 import { accessAuth } from './middleware/access-auth.js';
 import { householdScope } from './middleware/household-scope.js';
 import { requireGlobalAdmin } from './middleware/require-global-admin.js';
+import { resolveUser } from './middleware/resolve-user.js';
 import type { AppEnv } from './types.js';
 
 const app = new Hono<AppEnv>();
@@ -36,5 +38,10 @@ app.route('/api/households', households);
 // requireGlobalAdmin's own comment for why this doesn't reuse householdScope.
 app.use('/api/admin/*', accessAuth, requireGlobalAdmin);
 app.route('/api/admin', admin);
+
+// Per-user, deliberately NOT household-scoped — resolveUser resolves the
+// Access-verified email to a users row (notifications are per-user).
+app.use('/api/notifications/*', accessAuth, resolveUser);
+app.route('/api/notifications', notifications);
 
 export default app;

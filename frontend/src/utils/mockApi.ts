@@ -50,6 +50,18 @@ type MockJoinRequest = {
   createdAt: string;
 };
 
+// Mirrors the real backend's per-user notification state (see
+// backend/src/routes/notifications.ts). `provisioned` flips true on first
+// enable; `enabled` is the soft-off flag. server/topic/subscriberToken are the
+// fixed fake credentials a provisioned row would carry, used to render the QR.
+type MockNotifications = {
+  provisioned: boolean;
+  enabled: boolean;
+  server: string;
+  topic: string;
+  subscriberToken: string;
+};
+
 function seedMe() {
   return {
     id: 1,
@@ -127,6 +139,16 @@ function seedHouseholds(): MockHousehold[] {
   ];
 }
 
+function seedNotifications(): MockNotifications {
+  return {
+    provisioned: false,
+    enabled: false,
+    server: 'https://notifs.4irl.app',
+    topic: 'tasktracker-previewhash4e5tei-all',
+    subscriberToken: 'tk_preview_9f2a7c1e4b6d8035',
+  };
+}
+
 function seedJoinRequests(): MockJoinRequest[] {
   return [
     {
@@ -146,6 +168,7 @@ let members: MockMember[] = seedMembers();
 let rooms: MockRoom[] = seedRooms();
 let households: MockHousehold[] = seedHouseholds();
 let joinRequests: MockJoinRequest[] = seedJoinRequests();
+let notifications: MockNotifications = seedNotifications();
 let me = seedMe();
 let nextChoreId = 4;
 let nextMemberId = 3;
@@ -159,6 +182,7 @@ export function resetMockData(): void {
   rooms = seedRooms();
   households = seedHouseholds();
   joinRequests = seedJoinRequests();
+  notifications = seedNotifications();
   me = seedMe();
   nextChoreId = 4;
   nextMemberId = 3;
@@ -200,6 +224,51 @@ export async function mockFetch(path: string, init?: RequestInit): Promise<Respo
     }
     me = { ...me, swipeStyle };
     return jsonResponse({ success: true, data: { swipeStyle } });
+  }
+
+  // Notifications — mirrors backend/src/routes/notifications.ts. GET returns the
+  // full NotificationStatus wire shape; enable/disable/test echo the same shapes
+  // the real routes do so the frontend can setStatus(body.data) straight off the
+  // action responses (no re-fetch).
+  if (path === '/api/notifications' && method === 'GET') {
+    const data = notifications.provisioned
+      ? {
+          provisioned: true,
+          enabled: notifications.enabled,
+          server: notifications.server,
+          topic: notifications.topic,
+          subscriberToken: notifications.subscriberToken,
+        }
+      : { provisioned: false, enabled: false };
+    return jsonResponse({ success: true, data });
+  }
+  if (path === '/api/notifications/enable' && method === 'POST') {
+    // First enable provisions; a re-enable after soft-off preserves the existing
+    // token/topic — either way the row ends up provisioned + enabled.
+    notifications = { ...notifications, provisioned: true, enabled: true };
+    return jsonResponse({
+      success: true,
+      data: {
+        provisioned: true,
+        enabled: true,
+        server: notifications.server,
+        topic: notifications.topic,
+        subscriberToken: notifications.subscriberToken,
+      },
+    });
+  }
+  if (path === '/api/notifications/test' && method === 'POST') {
+    if (!notifications.provisioned || !notifications.enabled) {
+      return jsonResponse({ success: false, error: 'Notifications are not enabled' }, 409);
+    }
+    return jsonResponse({ success: true, data: null });
+  }
+  if (path === '/api/notifications/disable' && method === 'POST') {
+    if (!notifications.provisioned) {
+      return jsonResponse({ success: false, error: 'Notifications are not enabled' }, 409);
+    }
+    notifications = { ...notifications, enabled: false };
+    return jsonResponse({ success: true, data: { provisioned: true, enabled: false } });
   }
 
   if (path === '/api/chores' && method === 'GET') {

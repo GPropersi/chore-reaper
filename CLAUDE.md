@@ -13,7 +13,7 @@ app is live at chores.4irl.app, and those planning docs have been removed.
 
 ## Claude Config
 
-<!-- Consumed by the stronghold's central generic skills (see /Users/ggpropersi/code/CLAUDE.md).
+<!-- Consumed by the stronghold's central generic skills (see ~/code/CLAUDE.md).
      Stable keys — do not rename. This repo has its OWN GitHub-App bot toolkit under .claude/scripts/
      (a DISTINCT App from urls4irl's) — the Token generator and Bot push script keys point at the
      repo-local scripts, NOT ~/.claude/. Account-specific App/install IDs and GraphQL IDs are NOT

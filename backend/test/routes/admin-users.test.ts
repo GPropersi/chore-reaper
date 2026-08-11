@@ -44,6 +44,7 @@ beforeEach(async () => {
   stubAccessJwks();
   await env.DB.exec('DELETE FROM chores');
   await env.DB.exec('DELETE FROM join_requests');
+  await env.DB.exec('DELETE FROM user_notifications');
   await env.DB.exec('DELETE FROM household_members');
   await env.DB.exec('DELETE FROM users');
   await env.DB.exec('DELETE FROM households');
@@ -203,6 +204,13 @@ describe('DELETE /api/admin/users/:id', () => {
     await seedHouseholdMember({ id: 1, householdId: 1, email: 'admin@example.com', isAdmin: true });
     await seedHouseholdMember({ id: 2, householdId: 1, email: 'member@example.com' });
     await seedAdditionalMembership(2, 2);
+    // Seed a notifications row so the delete's hand-rolled cascade (there is no
+    // DB-level ON DELETE) is exercised against user_notifications too.
+    await env.DB.prepare(
+      'INSERT INTO user_notifications (user_id, person_hash, subscriber_token) VALUES (2, ?, ?)',
+    )
+      .bind('hash-abc', 'tk_subscriber')
+      .run();
 
     const res = await app.request(
       '/api/admin/users/2',
@@ -215,6 +223,8 @@ describe('DELETE /api/admin/users/:id', () => {
     expect(userRow).toBeNull();
     const memberships = await env.DB.prepare('SELECT id FROM household_members WHERE user_id = 2').all();
     expect(memberships.results).toHaveLength(0);
+    const notifications = await env.DB.prepare('SELECT id FROM user_notifications WHERE user_id = 2').all();
+    expect(notifications.results).toHaveLength(0);
   });
 
   it('clears invited_by on rows the deleted user invited, instead of blocking the delete', async () => {
