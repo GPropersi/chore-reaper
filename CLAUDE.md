@@ -28,15 +28,19 @@ app is live at chores.4irl.app, and those planning docs have been removed.
 - **Container runtime:** n/a (Node/TS monorepo run via npm workspaces; no root docker-compose — deploys to Cloudflare Workers/D1)
 - **App URL (Playwright MCP):** `http://localhost:5173` (Playwright `baseURL`; e2e webServer builds frontend then `vite preview` on :5173, backend dev on :8787, jwks on :8790)
 - **Test login:** n/a (e2e seeds a household via `e2e/global-setup.ts` against a local D1; no interactive login recorded — TODO if a login flow is needed)
-- **Commands:**
-  | Purpose           | Command                                                                            |
-  | ----------------- | ---------------------------------------------------------------------------------- |
-  | Integration tests | `npm run test:backend` (backend workspace)                                         |
-  | UI/e2e tests      | `npm run test:e2e` (Playwright)                                                    |
-  | JS/unit tests     | `npm run test:frontend` (frontend workspace)                                       |
-  | Build             | `npm run build:frontend`                                                           |
-  | Lint / format     | `npm run lint` (eslint) / `npm run format` (prettier) — lint-staged runs on commit |
-  | Dev               | `npm run dev` (concurrently: jwks + backend + frontend)                            |
+- **Commands:** (via root `Makefile` — thin wrappers around the npm workspace scripts; `make help` lists all)
+  | Purpose            | Command                                                                           |
+  | ------------------ | --------------------------------------------------------------------------------- |
+  | Integration tests  | `make test-backend` (backend workspace vitest)                                    |
+  | UI/e2e tests       | `make test-e2e` (Playwright)                                                      |
+  | JS/unit tests      | `make test-frontend` (frontend workspace vitest)                                  |
+  | Build              | `make build` (frontend production build)                                          |
+  | Lint / format      | `make lint` (eslint) / `make format` (prettier) — lint-staged also runs on commit |
+  | Dev                | `make dev` (concurrently: jwks + backend + frontend)                              |
+  | DB migrate (local) | `make migrate-local` (apply pending migrations to local Miniflare D1)             |
+  | DB migrate (prod)  | `make migrate-remote` (apply to remote production D1 — deploy-time)               |
+  | DB migrate status  | `make migrate-list` (local) / `make migrate-list-remote` (prod)                   |
+  | New migration      | `make migrate-new name=<snake_case_desc>` (scaffold next numbered file)           |
 - **GitHub project board:** n/a
 - **Issue labels:** resolve at runtime via `gh label list --repo GPropersi/chore-reaper` (do not invent labels)
 - **PR reviewer:** n/a
