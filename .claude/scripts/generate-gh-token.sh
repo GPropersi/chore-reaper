@@ -8,5 +8,7 @@
 # working unchanged — it still calls `.claude/scripts/generate-gh-token.sh` and
 # still gets a valid `ghs_` installation token, just minted from the shared App.
 # GH_APP_REPO pins the resolution to this repo regardless of the caller's CWD.
-# Tokens expire after 1 hour. The private key lives at ~/.claude/, outside the repo.
-exec env GH_APP_REPO="GPropersi/chore-reaper" "$HOME/.claude/generate-gh-token.sh"
+# Tokens expire after 1 hour. The real generator is TRACKED in the stronghold
+# (~/code/.claude/scripts/generate-gh-token.sh); only the private key lives at
+# ~/.claude/, outside every repo.
+exec env GH_APP_REPO="GPropersi/chore-reaper" "$HOME/code/.claude/scripts/generate-gh-token.sh"
