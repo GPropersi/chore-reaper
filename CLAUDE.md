@@ -16,8 +16,8 @@ app is live at chores.4irl.app, and those planning docs have been removed.
 <!-- Consumed by the stronghold's central generic skills (see ~/code/CLAUDE.md).
      Stable keys — do not rename. This repo now uses the SHARED consolidated bot
      (`gpropersi-claude`, one GitHub App across all repos) via the central push script + the
-     ~/.claude/ generator — the old repo-local `chore-reaper-claude` App toolkit under
-     .claude/scripts/ is retired. Account-specific App/install IDs and GraphQL IDs are NOT
+     tracked stronghold generator (`~/code/.claude/scripts/generate-gh-token.sh`) — the old
+     repo-local `chore-reaper-claude` App toolkit under .claude/scripts/ is retired. Account-specific App/install IDs and GraphQL IDs are NOT
      inlined here (secrets policy); only the public bot login + noreply email are recorded. -->
 
 - **Repo slug:** `GPropersi/chore-reaper` (this directory is named `tasktracker` but the repo is `chore-reaper`, live at chores.4irl.app)
