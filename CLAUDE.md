@@ -16,8 +16,8 @@ app is live at chores.4irl.app, and those planning docs have been removed.
 <!-- Consumed by the stronghold's central generic skills (see ~/code/CLAUDE.md).
      Stable keys — do not rename. This repo now uses the SHARED consolidated bot
      (`gpropersi-claude`, one GitHub App across all repos) via the central push script + the
-     ~/.claude/ generator — the old repo-local `chore-reaper-claude` App toolkit under
-     .claude/scripts/ is retired. Account-specific App/install IDs and GraphQL IDs are NOT
+     tracked stronghold generator (`~/code/.claude/scripts/generate-gh-token.sh`) — the old
+     repo-local `chore-reaper-claude` App toolkit under .claude/scripts/ is retired. Account-specific App/install IDs and GraphQL IDs are NOT
      inlined here (secrets policy); only the public bot login + noreply email are recorded. -->
 
 - **Repo slug:** `GPropersi/chore-reaper` (this directory is named `tasktracker` but the repo is `chore-reaper`, live at chores.4irl.app)
@@ -25,7 +25,7 @@ app is live at chores.4irl.app, and those planning docs have been removed.
 - **Plans/reviews layout:** `plans/<topic>/` (gitignored; not currently present in the tree — created on demand)
 - **Bot identity:** `gpropersi-claude[bot]` `141576524+gpropersi-claude[bot]@users.noreply.github.com` <!-- consolidated shared bot; replaced repo-local c4i-claude-bot -->
 - **Bot push script:** `~/code/.claude/scripts/gh-app-push.sh` (central, repo-agnostic; derives the repo from `origin`, pushes as the shared bot)
-- **Token generator:** `~/.claude/generate-gh-token.sh` (shared consolidated `gpropersi-claude` GitHub App; one generator serves every repo — auto-resolves the installation from the repo's owner. Key at `~/.claude/u4i-app.pem`, outside every repo)
+- **Token generator:** `~/code/.claude/scripts/generate-gh-token.sh` (tracked in the stronghold — the shared consolidated `gpropersi-claude` App; one generator serves every repo, auto-resolves the installation from the repo's owner. Only the private key `~/.claude/u4i-app.pem` lives outside git)
 - **Container runtime:** n/a (Node/TS monorepo run via npm workspaces; no root docker-compose — deploys to Cloudflare Workers/D1)
 - **App URL (Playwright MCP):** `http://localhost:5173` (Playwright `baseURL`; e2e webServer builds frontend then `vite preview` on :5173, backend dev on :8787, jwks on :8790)
 - **Test login:** n/a (e2e seeds a household via `e2e/global-setup.ts` against a local D1; no interactive login recorded — TODO if a login flow is needed)
