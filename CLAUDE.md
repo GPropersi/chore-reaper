@@ -44,4 +44,4 @@ app is live at chores.4irl.app, and those planning docs have been removed.
   | New migration      | `make migrate-new name=<snake_case_desc>` (scaffold next numbered file)           |
 - **GitHub project board:** n/a
 - **Issue labels:** resolve at runtime via `gh label list --repo GPropersi/chore-reaper` (do not invent labels)
-- **PR reviewer:** n/a
+- **PR reviewer:** `GPropersi`
