@@ -31,8 +31,19 @@ function useRooms() {
 
   useEffect(() => {
     apiFetch('/api/rooms')
-      .then((res) => res.json() as Promise<ApiResponse<Room[]>>)
+      .then((res) => {
+        if (!res.ok) {
+          // A resolved non-ok (e.g. an evicted session → 401 with a JSON error
+          // body) would otherwise parse to `data ?? [] = []` and clobber the
+          // cached rooms with an empty list. Fall back to cache instead.
+          const cached = localStorage.getItem(ROOMS_CACHE_KEY);
+          if (cached) setRooms(JSON.parse(cached) as Room[]);
+          return null;
+        }
+        return res.json() as Promise<ApiResponse<Room[]>>;
+      })
       .then((body) => {
+        if (!body) return;
         const fetched = body.data ?? [];
         localStorage.setItem(ROOMS_CACHE_KEY, JSON.stringify(fetched));
         setRooms(fetched);
@@ -58,7 +69,14 @@ function useMe() {
 
   function load(): Promise<Me | null> {
     return apiFetch('/api/me')
-      .then((res) => (res.ok ? (res.json() as Promise<Me>) : null))
+      .then((res) => {
+        if (res.ok) return res.json() as Promise<Me>;
+        // A resolved non-ok (e.g. an evicted session → 401) would otherwise
+        // yield null → a blank app. Fall back to the cached copy instead, the
+        // same way the .catch (thrown/offline) path below already does.
+        const cached = localStorage.getItem(ME_CACHE_KEY);
+        return cached ? (JSON.parse(cached) as Me) : null;
+      })
       .then((fetched) => {
         if (fetched) {
           localStorage.setItem(ME_CACHE_KEY, JSON.stringify(fetched));
