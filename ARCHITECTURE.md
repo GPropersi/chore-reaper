@@ -329,11 +329,15 @@ mean this can never be offline-_capable_, only offline-_tolerant_). Two mechanis
 
 The service worker's `NavigationRoute` serves the cached `index.html` shell for offline navigations, but
 its `navigateFallbackDenylist` (`vite.config.ts` workbox block: `/^\/cdn-cgi\//`, `/^\/api\//`, `/^\/auth\//`)
-excludes auth/recovery paths from that fallback. This is what lets a real top-level navigation reach the
+excludes recovery paths from that fallback. `/^\/cdn-cgi\//` and `/^\/api\//` cover the live Access-challenge
+and API surfaces; `/^\/auth\//` is a **forward-looking reservation** for the planned Tier 5 session endpoint
+(`/auth/login`) — no route lives under `/auth/` yet, but denylisting it now means that endpoint is already
+excluded from the shell fallback the day it lands. Excluding these lets a real top-level navigation reach the
 network so **Cloudflare Access can re-authenticate** — without the denylist the SW would answer every
 navigation (including a re-auth attempt) with the stale shell, pinning the app in an offline/expired state
 that a reload can't escape. The denylist is a hard requirement for the ITP offline-recovery fix; see the
-`safari-itp-offline-recovery` plan.
+`safari-itp-offline-recovery` plan. (Note that the Retry button reaches the network by unregistering the SW +
+clearing caches before navigating, since `/` itself is deliberately not denylisted.)
 
 ## Where to look for X
 

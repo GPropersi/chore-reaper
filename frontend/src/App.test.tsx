@@ -15,6 +15,27 @@ function jsonResponse(body: unknown) {
   );
 }
 
+function unauthorizedResponse() {
+  return Promise.resolve(
+    new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), {
+      status: 401,
+      headers: { 'content-type': 'application/json' },
+    }),
+  );
+}
+
+function forbiddenResponse() {
+  return Promise.resolve(
+    new Response(JSON.stringify({ success: false, error: 'Not a member of this household' }), {
+      status: 403,
+      headers: { 'content-type': 'application/json' },
+    }),
+  );
+}
+
+const ME_CACHE_KEY = 'me-cache-v1';
+const ROOMS_CACHE_KEY = 'rooms-cache-v1';
+
 const meResponse = {
   id: 1,
   email: 'a@example.com',
@@ -339,6 +360,148 @@ describe('App', () => {
 
       expect(await screen.findByText('Household B Chore')).toBeInTheDocument();
       expect(screen.queryByText('Household A Chore')).not.toBeInTheDocument();
+    });
+
+    // FIX 4: a failed switch must surface an explicit error, never silently
+    // revert to the old household via the generic /api/me cache fallback.
+    it('surfaces an error (no silent revert) when a household switch fails', async () => {
+      const user = userEvent.setup();
+      const multiHouseholdMeResponse = {
+        id: 1,
+        email: 'a@example.com',
+        timezone: 'UTC',
+        isAdmin: true,
+        memberships: [
+          { householdId: 1, householdName: 'Household A', householdTimezone: 'UTC' },
+          { householdId: 2, householdName: 'Household B', householdTimezone: 'UTC' },
+        ],
+        currentHouseholdId: 1,
+      };
+      vi.stubGlobal(
+        'fetch',
+        vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+          const url = typeof input === 'string' ? input : input.toString();
+          const householdId = new Headers(init?.headers).get('X-Household-Id');
+          if (url === '/api/me') {
+            // The switch target (household 2) fails — e.g. the session died
+            // mid-switch. The initial headerless mount resolves household 1.
+            if (householdId === '2') return unauthorizedResponse();
+            return jsonResponse({ ...multiHouseholdMeResponse, currentHouseholdId: 1 });
+          }
+          if (url === '/api/chores') return jsonResponse({ success: true, data: [] });
+          if (url === '/api/rooms') return jsonResponse(roomsResponse);
+          if (url === '/api/members') return jsonResponse({ success: true, data: [] });
+          if (url === '/api/admin/users') return jsonResponse({ success: true, data: [] });
+          if (url === '/api/admin/join-requests') return jsonResponse({ success: true, data: [] });
+          if (url === '/api/admin/households') return jsonResponse({ success: true, data: [] });
+          throw new Error(`Unhandled fetch: ${url}`);
+        }),
+      );
+
+      render(<App />);
+
+      await user.click(await screen.findByTestId('admin-nav-link'));
+      await user.click(await screen.findByRole('button', { name: 'Switch household' }));
+      const modal = screen.getByTestId('switch-household-modal-backdrop');
+      await user.click(within(modal).getByRole('button', { name: 'Household B' }));
+
+      // The failure is surfaced explicitly rather than silently reverting.
+      expect(await screen.findByText(/Couldn't switch households/)).toBeInTheDocument();
+      // And the app stays usable on the still-valid old household (Household A).
+      expect(screen.getByTestId('household-name')).toHaveTextContent('Household A');
+    });
+
+    // FIX 2 (App layer): a 403 for the scoped household must not surface stale
+    // data — it re-resolves /api/me headerless onto a household we're in.
+    it('re-resolves onto a valid household when /api/me 403s for the scoped household', async () => {
+      // The client is still scoped to household 2 from a prior session but has
+      // been removed from it; only household 1 remains. Set it through the api
+      // module (not raw localStorage) so apiFetch's in-memory header cache
+      // actually reflects it.
+      setCurrentHouseholdId(2);
+      const householdHeaders: (string | null)[] = [];
+      vi.stubGlobal(
+        'fetch',
+        vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+          const url = typeof input === 'string' ? input : input.toString();
+          const householdId = new Headers(init?.headers).get('X-Household-Id');
+          if (url === '/api/me') {
+            householdHeaders.push(householdId);
+            if (householdId === '2') return forbiddenResponse();
+            return jsonResponse(meResponse); // headerless re-resolve → household 1
+          }
+          if (url === '/api/chores') {
+            return jsonResponse({
+              success: true,
+              data: [
+                {
+                  id: 1,
+                  name: 'Vacuum',
+                  roomId: 1,
+                  dateLastCompleted: '2026-06-01T00:00:00.000Z',
+                  duration: 20,
+                  frequency: 7,
+                  version: 1,
+                },
+              ],
+            });
+          }
+          if (url === '/api/rooms') return jsonResponse(roomsResponse);
+          throw new Error(`Unhandled fetch: ${url}`);
+        }),
+      );
+
+      render(<App />);
+
+      // We land on the valid household's data, not a blank/stale screen.
+      expect(await screen.findByText('Vacuum')).toBeInTheDocument();
+      // /api/me was retried headerless after the 403 (re-resolve happened).
+      expect(householdHeaders).toEqual(['2', null]);
+    });
+  });
+
+  // FIX 5: the resolved-401 cache fallback in useMe / useRooms.
+  describe('resolved-401 cache fallback', () => {
+    it('renders the cached household + room tabs when a mount-time /api/me resolves 401', async () => {
+      localStorage.setItem(ME_CACHE_KEY, JSON.stringify(meResponse));
+      localStorage.setItem(ROOMS_CACHE_KEY, JSON.stringify(roomsResponse.data));
+      vi.stubGlobal(
+        'fetch',
+        vi.fn((input: RequestInfo | URL) => {
+          const url = typeof input === 'string' ? input : input.toString();
+          // Everything resolves a 401 JSON body (evicted session), not a throw.
+          if (url === '/api/me' || url === '/api/rooms' || url === '/api/chores') {
+            return unauthorizedResponse();
+          }
+          throw new Error(`Unhandled fetch: ${url}`);
+        }),
+      );
+
+      render(<App />);
+
+      // The app renders from cache instead of blanking or losing its tabs.
+      expect(await screen.findByRole('button', { name: 'Living Room' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Kitchen' })).toBeInTheDocument();
+    });
+
+    it('keeps cached room tabs when /api/rooms alone resolves 401 (me succeeds)', async () => {
+      localStorage.setItem(ROOMS_CACHE_KEY, JSON.stringify(roomsResponse.data));
+      vi.stubGlobal(
+        'fetch',
+        vi.fn((input: RequestInfo | URL) => {
+          const url = typeof input === 'string' ? input : input.toString();
+          if (url === '/api/me') return jsonResponse(meResponse);
+          if (url === '/api/chores') return jsonResponse({ success: true, data: [] });
+          if (url === '/api/rooms') return unauthorizedResponse();
+          throw new Error(`Unhandled fetch: ${url}`);
+        }),
+      );
+
+      render(<App />);
+
+      // useRooms falls back to the cache rather than clobbering the tabs empty.
+      expect(await screen.findByRole('button', { name: 'Living Room' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Kitchen' })).toBeInTheDocument();
     });
   });
 });
