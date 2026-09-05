@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Settings } from 'lucide-react';
 import type { Chore, Room, SwipeStyle } from '@customTypes/SharedTypes';
 import { useMidnightClock } from '../../hooks/useMidnightClock';
@@ -11,7 +11,7 @@ import SettingsModal from '../settings/SettingsModal';
 import StatusBanner from '../common/StatusBanner';
 import { useOutbox } from '../../outbox/useOutbox';
 import type { ChorePayload, FlushResult, Outbox, OutboxEntry } from '../../outbox/outbox';
-import { readChoresCache, writeChoresCache } from '../../cache/choresCache';
+import { readChoresCache, writeChoresCache, clearChoresCache } from '../../cache/choresCache';
 import { apiFetch } from '../../utils/api';
 import { getDeviceTimezone } from '@utils/deviceTimezone';
 import { cityLabel, utcOffsetLabel } from '@utils/timezones';
@@ -32,6 +32,11 @@ type ChoresViewProps = {
   rooms: Room[];
   swipeStyle: SwipeStyle;
   onSwipeStyleChange: (swipeStyle: SwipeStyle) => void;
+  // Called when a household-scoped request comes back 403 (the viewer was
+  // removed from the currently-active household). Lets App re-resolve /api/me
+  // and re-scope to a household the user is actually in, rather than this view
+  // continuing to render the revoked household's private data.
+  onHouseholdRevoked?: () => void;
 };
 
 function toChorePayload(input: Omit<Chore, 'id'>): ChorePayload {
@@ -53,6 +58,14 @@ function mergePendingCreates(chores: ChoreWithVersion[], entries: OutboxEntry[])
     .filter((e) => e.type === 'create' && !existingIds.has(e.tempId))
     .map((e) => pendingCreateToChore(e as Extract<OutboxEntry, { type: 'create' }>));
   return pending.length > 0 ? [...chores, ...pending] : chores;
+}
+
+// True when focus currently sits on the stale banner container or its Retry
+// button — the two elements that get removed on a tone/action change or a
+// successful reconnect, so focus must be handed off before they go away.
+function isBannerFocused(): boolean {
+  const testid = (document.activeElement as HTMLElement | null)?.getAttribute('data-testid');
+  return testid === 'status-banner' || testid === 'status-banner-action';
 }
 
 type MutateOptions<T> = {
@@ -93,6 +106,7 @@ export default function ChoresView({
   rooms,
   swipeStyle,
   onSwipeStyleChange,
+  onHouseholdRevoked,
 }: ChoresViewProps) {
   const today = useMidnightClock(householdTimezone);
   // Chore due dates/ordering run entirely on the household's clock (not the
@@ -123,34 +137,114 @@ export default function ChoresView({
   const { append, entries } = useOutbox(outboxProp, handleFlushResults);
 
   const [isStale, setIsStale] = useState(false);
+  // Seeded from navigator.onLine at init so an offline page load renders the
+  // offline banner (Retry hidden) at mount, not only after a transition event.
+  const [online, setOnline] = useState(() => navigator.onLine);
+  // Stable focus anchor that survives the banner's removal on reconnect.
+  const addChoreRef = useRef<HTMLButtonElement>(null);
+  // ChoresView's own root — focus hand-off must target THIS view's StatusBanner,
+  // not a global `[data-testid="status-banner"]` that could match the App-level
+  // switch-error banner when both are mounted at once.
+  const rootRef = useRef<HTMLDivElement>(null);
+  // Bumped on every online/offline event. A `load()` captures the generation
+  // in flight and refuses to apply its (now stale) result if a newer
+  // connectivity event has since fired — otherwise a connectivity flap could
+  // let an in-flight online fetch win and leave the banner/online state
+  // contradicting the most-recent real connectivity signal.
+  const connectivityGenRef = useRef(0);
+
+  async function renderFromCache(isCurrent: () => boolean = () => true) {
+    const cached = await readChoresCache<ChoreWire[]>();
+    if (!isCurrent()) return;
+    setChores(mergePendingCreates((cached ?? []).map(wireToChore), entries));
+    setIsStale(true);
+  }
 
   useEffect(() => {
-    async function renderFromCache() {
-      const cached = await readChoresCache<ChoreWire[]>();
-      setChores(mergePendingCreates((cached ?? []).map(wireToChore), entries));
-      setIsStale(true);
-    }
-
-    async function load() {
+    // Returns true when it ended stale (rendered from cache), false when a fresh
+    // network copy was applied. `onBeforeFresh` runs immediately before the
+    // fresh state (and the isStale=false that unmounts the banner) is applied,
+    // giving the reconnect handler a chance to hand focus off first.
+    async function load(gen: number, onBeforeFresh?: () => void): Promise<boolean> {
+      const isCurrent = () => connectivityGenRef.current === gen;
       if (!navigator.onLine) {
-        await renderFromCache();
-        return;
+        await renderFromCache(isCurrent);
+        return true;
       }
       try {
         const res = await apiFetch('/api/chores');
+        if (res.status === 403) {
+          // 403 (not 401): the session is valid but the viewer was removed from
+          // the currently-scoped household. Do NOT fall back to this
+          // household's cached private data — drop it and hand off to App to
+          // re-resolve /api/me and re-scope us to a household we're actually in.
+          // Gate the whole side-effecting block behind isCurrent() (like every
+          // sibling branch): a superseded in-flight 403 must not wipe cache a
+          // newer successful fetch just wrote, nor fire a spurious revocation
+          // cascade over an authoritative newer result.
+          if (isCurrent()) {
+            await clearChoresCache();
+            setChores([]);
+            setIsStale(false);
+            onHouseholdRevoked?.();
+          }
+          return false;
+        }
+        if (!res.ok) {
+          // A resolved non-ok (e.g. an evicted Access cookie → 401) must be
+          // treated exactly like a thrown/offline error: fall back to cache and
+          // flag stale, rather than parsing an error body into an empty list.
+          await renderFromCache(isCurrent);
+          return true;
+        }
         const body = (await res.json()) as ApiResponse<ChoreWire[]>;
         const data = body.data ?? [];
+        if (!isCurrent()) return false;
+        onBeforeFresh?.();
         setChores(mergePendingCreates(data.map(wireToChore), entries));
         setIsStale(false);
         await writeChoresCache(data);
+        return false;
       } catch {
-        await renderFromCache();
+        await renderFromCache(isCurrent);
+        return true;
       }
     }
 
-    load();
-    window.addEventListener('online', load);
-    return () => window.removeEventListener('online', load);
+    // Single consolidated `online` handler (DD13): re-fetch FIRST, and only if
+    // the re-fetch did not recover restore the amber Retry banner — so a
+    // successful reconnect never flashes the amber banner on its way to
+    // unmounting. If focus is parked on the banner/Retry when the whole banner
+    // is about to unmount, move it to the always-mounted "+ Add Chore" button
+    // before the banner goes away.
+    async function handleOnline() {
+      connectivityGenRef.current += 1;
+      const gen = connectivityGenRef.current;
+      const stillStale = await load(gen, () => {
+        if (isBannerFocused()) addChoreRef.current?.focus();
+      });
+      // Only assert "back online but still stale" if no newer connectivity
+      // event has superseded this handler in the meantime.
+      if (stillStale && connectivityGenRef.current === gen) setOnline(true);
+    }
+
+    function handleOffline() {
+      connectivityGenRef.current += 1;
+      // Retry is about to be dropped but the (now gray) banner stays mounted —
+      // if focus was on Retry, park it on the banner container instead of body.
+      if (isBannerFocused()) {
+        rootRef.current?.querySelector<HTMLElement>('[data-testid="status-banner"]')?.focus();
+      }
+      setOnline(false);
+    }
+
+    load(connectivityGenRef.current);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
     // `entries` is intentionally read only at mount — it merges in whatever was left over from a
     // prior session, not live updates from this one (those already flow through `chores` directly).
     // Depending on it here would re-fetch from the network on every outbox append/removal.
@@ -221,9 +315,29 @@ export default function ChoresView({
 
   async function handleDiscardConflict() {
     setConflictChoreId(null);
-    const res = await apiFetch('/api/chores');
-    const body = (await res.json()) as ApiResponse<ChoreWire[]>;
-    setChores((body.data ?? []).map(wireToChore));
+    try {
+      const res = await apiFetch('/api/chores');
+      if (res.status === 403) {
+        // Removed from the active household mid-edit — same handling as load():
+        // drop the revoked household's cache and let App re-scope us instead of
+        // rendering its stale private data.
+        await clearChoresCache();
+        setChores([]);
+        setIsStale(false);
+        onHouseholdRevoked?.();
+        return;
+      }
+      if (!res.ok) {
+        // Same unification as load(): a resolved non-ok (evicted session → 401)
+        // must fall back to cache + stale flag, not silently blank the list.
+        await renderFromCache();
+        return;
+      }
+      const body = (await res.json()) as ApiResponse<ChoreWire[]>;
+      setChores((body.data ?? []).map(wireToChore));
+    } catch {
+      await renderFromCache();
+    }
   }
 
   function handleKeepEditing() {
@@ -231,18 +345,57 @@ export default function ChoresView({
     setConflictChoreId(null);
   }
 
+  // A real top-level navigation to the Access-gated origin re-triggers the SSO
+  // redirect that repopulates the session cookie. But `/` is NOT in the SW's
+  // navigateFallbackDenylist, so while the service worker is active (the normal
+  // returning-user case this fix targets) Workbox would answer the navigation
+  // with the stale precached shell and never hit the network — Access would
+  // never re-authenticate. So first tear the SW + caches down, THEN navigate:
+  // with the SW gone the navigation reaches the network → Access re-auth, and
+  // the SW simply re-installs after re-login (offline capability returns next
+  // load). NOT react-router (client-only, never reaches Access) and NOT
+  // location.reload() (the SW may still serve the cached shell).
+  async function handleRetry() {
+    // The teardown must NEVER block the recovery navigation: in the Safari/ITP/
+    // private-browsing environment this targets, a storage/SW API call can
+    // throw (or a registration/cache delete can reject). Swallow any such
+    // failure via allSettled + try/finally so `window.location.assign('/')`
+    // always runs — a Retry that silently does nothing is worse than the bug.
+    try {
+      const teardown: Promise<unknown>[] = [];
+      if (typeof navigator !== 'undefined' && navigator.serviceWorker) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        teardown.push(...registrations.map((registration) => registration.unregister()));
+      }
+      if (typeof caches !== 'undefined') {
+        const keys = await caches.keys();
+        teardown.push(...keys.map((key) => caches.delete(key)));
+      }
+      await Promise.allSettled(teardown);
+    } finally {
+      window.location.assign('/');
+    }
+  }
+
   const editingChore = chores.find((c) => c.id === editingId);
 
   const visibleChores = useRoomFilter(chores, selectedRoom);
 
   return (
-    <div>
-      {isStale && (
-        <StatusBanner
-          tone="stale"
-          message="Showing cached data — you're offline or the server is unreachable."
-        />
-      )}
+    <div ref={rootRef}>
+      {isStale &&
+        (online ? (
+          <StatusBanner
+            tone="stale"
+            message="Showing cached data. Your session may have expired — tap Retry to sign in."
+            action={{ label: 'Retry', onClick: handleRetry }}
+          />
+        ) : (
+          <StatusBanner
+            tone="offline"
+            message="You're offline — showing cached data. We'll reconnect automatically."
+          />
+        ))}
       <div className="p-4">
         {timezoneMismatch && (
           <span data-testid="timezone-mismatch-notice" className="block text-amber-400 text-xs mb-3">
@@ -262,6 +415,7 @@ export default function ChoresView({
             <Settings size={18} />
           </button>
           <button
+            ref={addChoreRef}
             type="button"
             onClick={() => setIsAddOpen(true)}
             className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 px-4 rounded-lg"
@@ -270,16 +424,37 @@ export default function ChoresView({
           </button>
         </div>
       </div>
-      <ChoreList
-        chores={orderChores(visibleChores, today, householdTimezone)}
-        day={today}
-        householdTimezone={householdTimezone}
-        isSimulating={false}
-        swipeStyle={swipeStyle}
-        onComplete={handleComplete}
-        onDelete={handleDelete}
-        onEdit={setEditingId}
-      />
+      {/* Stable aria-live region (DD5): the container stays mounted at all times
+          and only its children swap, so a transition between the can't-load
+          block / benign-empty-room state / populated list is announced to
+          screen readers independently of the StatusBanner's own role="status". */}
+      <div aria-live="polite">
+        {isStale && chores.length === 0 ? (
+          <div data-testid="chores-unavailable" className="text-center py-8">
+            <h3 className="text-amber-300 text-base font-semibold mb-2">Can't load your chores right now.</h3>
+            <p className="text-gray-400 text-sm max-w-sm mx-auto">
+              {online
+                ? "We couldn't reach the server and there's no saved copy on this device. Check your connection, or tap Retry above to sign in again."
+                : "We couldn't reach the server and there's no saved copy on this device. Check your connection — we'll reconnect automatically once you're back online."}
+            </p>
+          </div>
+        ) : chores.length > 0 && visibleChores.length === 0 ? (
+          <p data-testid="chores-empty-room" className="text-gray-400 text-center py-8">
+            No chores in this room.
+          </p>
+        ) : (
+          <ChoreList
+            chores={orderChores(visibleChores, today, householdTimezone)}
+            day={today}
+            householdTimezone={householdTimezone}
+            isSimulating={false}
+            swipeStyle={swipeStyle}
+            onComplete={handleComplete}
+            onDelete={handleDelete}
+            onEdit={setEditingId}
+          />
+        )}
+      </div>
       {isSettingsOpen && (
         <SettingsModal
           swipeStyle={swipeStyle}

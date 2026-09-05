@@ -35,6 +35,7 @@ export default defineConfig(({ mode }) => {
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,svg,png}'],
+          navigateFallbackDenylist: [/^\/cdn-cgi\//, /^\/api\//, /^\/auth\//],
         },
       }),
     ],
