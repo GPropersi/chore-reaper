@@ -95,12 +95,23 @@ function useMe() {
   const revokingRef = useRef(false);
 
   // Resolves the /api/me response into a Me. `allowReresolve` gates the 403
-  // recovery so the headerless retry can't loop.
+  // recovery so the headerless retry can't loop. When it is false we are ON
+  // that headerless revocation retry: a non-ok/thrown result there means the
+  // just-revoked household was the user's ONLY membership (backend returns 401
+  // for zero memberships), so we must NOT resurrect the stale cached identity —
+  // which still names the revoked household — or applyMe would re-persist the
+  // revoked id and leave the app silently stuck AND reload-proof.
   async function fetchMe(allowReresolve: boolean): Promise<Me | null> {
     let res: Response;
     try {
       res = await apiFetch('/api/me');
     } catch {
+      if (!allowReresolve) {
+        // Offline mid-revocation: drop the revoked cached Me and resolve to the
+        // no-household state instead of re-adopting it.
+        localStorage.removeItem(ME_CACHE_KEY);
+        return null;
+      }
       const cached = localStorage.getItem(ME_CACHE_KEY);
       return cached ? (JSON.parse(cached) as Me) : null;
     }
@@ -109,15 +120,22 @@ function useMe() {
       // Authenticated, but removed from the household the client is scoped to.
       // Drop the stale X-Household-Id + that household's private caches, then
       // re-resolve headerless so the backend re-scopes us to a household we're
-      // actually in (200), or to the truly-gone case (401 → cache fallback
+      // actually in (200), or to the truly-gone case (401 → no-household state
       // below). Never fall back to the revoked household's cached identity.
       await clearHouseholdScopedCaches();
       setCurrentHouseholdId(null);
       return fetchMe(false);
     }
-    // 401 / other non-ok: an evicted session — a resolved non-ok would
-    // otherwise yield null → a blank app. Fall back to the cached copy, the
-    // same way the thrown/offline path in fetchMe already does.
+    if (!allowReresolve) {
+      // Headerless revocation retry came back non-ok (401 → zero memberships):
+      // the revoked household was the last one. Clear the stale ME cache and
+      // resolve to the no-household state — never re-adopt the revoked id.
+      localStorage.removeItem(ME_CACHE_KEY);
+      return null;
+    }
+    // 401 / other non-ok on the ordinary mount path: an evicted session — a
+    // resolved non-ok would otherwise yield null → a blank app. Fall back to
+    // the cached copy, the same way the thrown/offline path above does.
     const cached = localStorage.getItem(ME_CACHE_KEY);
     return cached ? (JSON.parse(cached) as Me) : null;
   }
@@ -149,6 +167,20 @@ function useMe() {
       await clearHouseholdScopedCaches();
       setCurrentHouseholdId(null);
       applyMe(await fetchMe(false));
+    } catch {
+      // A storage throw during recovery (Safari private-mode IndexedDB /
+      // localStorage can throw — the exact environment this fix targets) must
+      // still resolve to a sane, rendered state rather than an unhandled
+      // rejection (callers fire this without awaiting/catching). Best-effort
+      // drop the revoked identity, then fall through to the no-household state.
+      try {
+        localStorage.removeItem(ME_CACHE_KEY);
+        setCurrentHouseholdId(null);
+      } catch {
+        // Storage is unavailable — nothing more we can clear; still resolve to
+        // the no-household state below so `me` is never left un-rescoped.
+      }
+      applyMe(null);
     } finally {
       revokingRef.current = false;
       setLoading(false);
@@ -324,11 +356,30 @@ function App() {
 
   if (loading) return null;
 
+  // `me` is null after loading only when the session resolved to zero
+  // memberships — most importantly after the user's LAST household was revoked
+  // and the headerless re-resolve returned 401. Render an explanation instead
+  // of the blank screen Home/AdminRoute would otherwise show (both return null
+  // when `me` is null).
+  if (!me) {
+    return (
+      <div
+        data-testid="no-household"
+        className="min-h-screen flex items-center justify-center p-6 text-center"
+      >
+        <p className="text-gray-300 text-sm max-w-sm">
+          You're not a member of any household. Please contact an admin, or sign in again.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <BrowserRouter>
       {switchError && (
         <StatusBanner
           tone="warning"
+          testId="switch-error-banner"
           message="Couldn't switch households — please try again."
           action={{ label: 'Dismiss', onClick: dismissSwitchError }}
         />

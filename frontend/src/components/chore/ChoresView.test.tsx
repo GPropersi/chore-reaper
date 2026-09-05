@@ -757,6 +757,51 @@ describe('ChoresView', () => {
     }
   });
 
+  it('still navigates to / on Retry even if SW-unregister / cache-delete rejects (FIX C)', async () => {
+    // In Safari/ITP/private-browsing a storage or SW teardown call can reject —
+    // that must not block the recovery navigation (a silent no-op Retry is
+    // worse than the original bug).
+    await writeChoresCache(mockChores);
+    const location = stubLocationAssign();
+    const unregister = vi.fn(() => Promise.reject(new Error('unregister failed')));
+    const cacheDelete = vi.fn(() => Promise.reject(new Error('cache delete failed')));
+    vi.stubGlobal('navigator', {
+      ...navigator,
+      onLine: true,
+      serviceWorker: { getRegistrations: vi.fn(() => Promise.resolve([{ unregister }])) },
+    });
+    vi.stubGlobal('caches', {
+      keys: vi.fn(() => Promise.resolve(['workbox-precache-v1'])),
+      delete: cacheDelete,
+    });
+    const user = userEvent.setup();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => unauthorizedResponse()),
+    );
+
+    try {
+      render(
+        <ChoresView
+          householdTimezone="UTC"
+          rooms={mockRooms}
+          swipeStyle="ios"
+          onSwipeStyleChange={vi.fn()}
+        />,
+      );
+      await waitFor(() => expect(screen.getByTestId('status-banner-action')).toBeInTheDocument());
+
+      await user.click(screen.getByTestId('status-banner-action'));
+
+      // The teardown was attempted but rejected — navigation still happens.
+      await waitFor(() => expect(location.assign).toHaveBeenCalledWith('/'));
+      expect(unregister).toHaveBeenCalled();
+      expect(cacheDelete).toHaveBeenCalledWith('workbox-precache-v1');
+    } finally {
+      location.restore();
+    }
+  });
+
   it('hides Retry and shows the offline copy when offline, then re-shows Retry once back online (DD7)', async () => {
     await writeChoresCache(mockChores);
     vi.stubGlobal('navigator', { ...navigator, onLine: false });

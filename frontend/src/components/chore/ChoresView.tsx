@@ -142,6 +142,10 @@ export default function ChoresView({
   const [online, setOnline] = useState(() => navigator.onLine);
   // Stable focus anchor that survives the banner's removal on reconnect.
   const addChoreRef = useRef<HTMLButtonElement>(null);
+  // ChoresView's own root — focus hand-off must target THIS view's StatusBanner,
+  // not a global `[data-testid="status-banner"]` that could match the App-level
+  // switch-error banner when both are mounted at once.
+  const rootRef = useRef<HTMLDivElement>(null);
   // Bumped on every online/offline event. A `load()` captures the generation
   // in flight and refuses to apply its (now stale) result if a newer
   // connectivity event has since fired — otherwise a connectivity flap could
@@ -174,12 +178,16 @@ export default function ChoresView({
           // the currently-scoped household. Do NOT fall back to this
           // household's cached private data — drop it and hand off to App to
           // re-resolve /api/me and re-scope us to a household we're actually in.
-          await clearChoresCache();
+          // Gate the whole side-effecting block behind isCurrent() (like every
+          // sibling branch): a superseded in-flight 403 must not wipe cache a
+          // newer successful fetch just wrote, nor fire a spurious revocation
+          // cascade over an authoritative newer result.
           if (isCurrent()) {
+            await clearChoresCache();
             setChores([]);
             setIsStale(false);
+            onHouseholdRevoked?.();
           }
-          onHouseholdRevoked?.();
           return false;
         }
         if (!res.ok) {
@@ -225,7 +233,7 @@ export default function ChoresView({
       // Retry is about to be dropped but the (now gray) banner stays mounted —
       // if focus was on Retry, park it on the banner container instead of body.
       if (isBannerFocused()) {
-        document.querySelector<HTMLElement>('[data-testid="status-banner"]')?.focus();
+        rootRef.current?.querySelector<HTMLElement>('[data-testid="status-banner"]')?.focus();
       }
       setOnline(false);
     }
@@ -348,15 +356,25 @@ export default function ChoresView({
   // load). NOT react-router (client-only, never reaches Access) and NOT
   // location.reload() (the SW may still serve the cached shell).
   async function handleRetry() {
-    if (typeof navigator !== 'undefined' && navigator.serviceWorker) {
-      const registrations = await navigator.serviceWorker.getRegistrations();
-      await Promise.all(registrations.map((registration) => registration.unregister()));
+    // The teardown must NEVER block the recovery navigation: in the Safari/ITP/
+    // private-browsing environment this targets, a storage/SW API call can
+    // throw (or a registration/cache delete can reject). Swallow any such
+    // failure via allSettled + try/finally so `window.location.assign('/')`
+    // always runs — a Retry that silently does nothing is worse than the bug.
+    try {
+      const teardown: Promise<unknown>[] = [];
+      if (typeof navigator !== 'undefined' && navigator.serviceWorker) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        teardown.push(...registrations.map((registration) => registration.unregister()));
+      }
+      if (typeof caches !== 'undefined') {
+        const keys = await caches.keys();
+        teardown.push(...keys.map((key) => caches.delete(key)));
+      }
+      await Promise.allSettled(teardown);
+    } finally {
+      window.location.assign('/');
     }
-    if (typeof caches !== 'undefined') {
-      const keys = await caches.keys();
-      await Promise.all(keys.map((key) => caches.delete(key)));
-    }
-    window.location.assign('/');
   }
 
   const editingChore = chores.find((c) => c.id === editingId);
@@ -364,7 +382,7 @@ export default function ChoresView({
   const visibleChores = useRoomFilter(chores, selectedRoom);
 
   return (
-    <div>
+    <div ref={rootRef}>
       {isStale &&
         (online ? (
           <StatusBanner

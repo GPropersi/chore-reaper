@@ -35,6 +35,7 @@ function forbiddenResponse() {
 
 const ME_CACHE_KEY = 'me-cache-v1';
 const ROOMS_CACHE_KEY = 'rooms-cache-v1';
+const CURRENT_HOUSEHOLD_ID_KEY = 'current-household-id-v1';
 
 const meResponse = {
   id: 1,
@@ -457,6 +458,79 @@ describe('App', () => {
       expect(await screen.findByText('Vacuum')).toBeInTheDocument();
       // /api/me was retried headerless after the 403 (re-resolve happened).
       expect(householdHeaders).toEqual(['2', null]);
+    });
+
+    // FIX A: when the revoked household was the user's ONLY membership, the
+    // headerless re-resolve returns 401 (zero memberships). The client must NOT
+    // re-adopt the stale cached identity that still names the revoked household
+    // (which would leave it silently stuck AND reload-proof) — it resolves to
+    // the no-household state instead.
+    it('does not re-persist the revoked household when it was the last one (403 → headerless 401)', async () => {
+      // Scoped to household 2, and a stale ME cache still naming household 2 —
+      // exactly the identity that must NOT be resurrected.
+      setCurrentHouseholdId(2);
+      localStorage.setItem(ME_CACHE_KEY, JSON.stringify({ ...meResponse, currentHouseholdId: 2 }));
+      vi.stubGlobal(
+        'fetch',
+        vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+          const url = typeof input === 'string' ? input : input.toString();
+          const householdId = new Headers(init?.headers).get('X-Household-Id');
+          if (url === '/api/me') {
+            // Scoped call 403s (removed); headerless re-resolve 401s (the
+            // revoked household was the only membership → zero left).
+            if (householdId === '2') return forbiddenResponse();
+            return unauthorizedResponse();
+          }
+          if (url === '/api/rooms') return unauthorizedResponse();
+          if (url === '/api/chores') return unauthorizedResponse();
+          throw new Error(`Unhandled fetch: ${url}`);
+        }),
+      );
+
+      render(<App />);
+
+      // The user gets an explanation, not a blank screen or the revoked data.
+      expect(await screen.findByTestId('no-household')).toBeInTheDocument();
+      expect(screen.getByText(/not a member of any household/i)).toBeInTheDocument();
+      // The revoked id is neither re-persisted to localStorage nor left behind:
+      // a reload must not resurrect it.
+      expect(localStorage.getItem(CURRENT_HOUSEHOLD_ID_KEY)).not.toBe('2');
+      expect(localStorage.getItem(CURRENT_HOUSEHOLD_ID_KEY)).toBeNull();
+      // The stale ME cache naming the revoked household is cleared too.
+      expect(localStorage.getItem(ME_CACHE_KEY)).toBeNull();
+    });
+
+    // FIX D: a storage throw DURING revocation recovery (Safari private-mode
+    // IndexedDB/localStorage can throw) must still resolve to a sane state
+    // rather than leaving an unhandled rejection with `me` un-rescoped.
+    it('resolves to the no-household state when storage throws mid-revocation recovery', async () => {
+      setCurrentHouseholdId(1);
+      vi.stubGlobal(
+        'fetch',
+        vi.fn((input: RequestInfo | URL) => {
+          const url = typeof input === 'string' ? input : input.toString();
+          if (url === '/api/me') return jsonResponse(meResponse);
+          if (url === '/api/rooms') return jsonResponse(roomsResponse);
+          // A live 403 on chores drives ChoresView → onHouseholdRevoked →
+          // handleHouseholdRevoked, whose cache teardown throws (below).
+          if (url === '/api/chores') return forbiddenResponse();
+          throw new Error(`Unhandled fetch: ${url}`);
+        }),
+      );
+      // The first localStorage.removeItem during recovery (in
+      // clearHouseholdScopedCaches) throws, simulating an ITP-constrained store.
+      const removeItemSpy = vi.spyOn(Storage.prototype, 'removeItem').mockImplementationOnce(() => {
+        throw new Error('storage unavailable');
+      });
+
+      try {
+        render(<App />);
+        // Recovery still lands on the no-household state instead of hanging or
+        // rejecting unhandled.
+        expect(await screen.findByTestId('no-household')).toBeInTheDocument();
+      } finally {
+        removeItemSpy.mockRestore();
+      }
     });
   });
 
