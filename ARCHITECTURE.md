@@ -339,6 +339,37 @@ that a reload can't escape. The denylist is a hard requirement for the ITP offli
 `safari-itp-offline-recovery` plan. (Note that the Retry button reaches the network by unregistering the SW +
 clearing caches before navigating, since `/` itself is deliberately not denylisted.)
 
+### Recovering a stuck/stale client (runbook)
+
+Because this is a PWA (`registerType: 'autoUpdate'`, so the built `sw.js` sets `skipWaiting` + `clientsClaim`),
+an already-installed client keeps running the **previous** service worker until the browser detects and
+activates the new one — normally a reload or two after a deploy. A private/incognito window has no prior SW,
+so it always loads the newest version immediately; a mismatch between the two is the tell-tale sign of a
+stale SW, not a broken deploy.
+
+**Worst case — reloading "keeps coming back":** a device that has the old SW **and** an
+ITP-evicted Access session at the same time can get stuck — the old SW serves the old cached shell, so reloads
+never pick up the fix. The steady-state fix (the Retry button, honest 401/403 states) can only take over once
+the new SW is active, so an affected device needs a **one-time** manual storage clear:
+
+- **iOS Safari:** Settings → Safari → Advanced → Website Data → search `4irl` → swipe-delete every match
+  (`chores.4irl.app`, `4irl.app`, `urls4irl.cloudflareaccess.com`) → fully close Safari → reopen
+  `chores.4irl.app` (fresh Access login + new SW).
+- **Installed to Home Screen (standalone PWA):** also delete the Home-Screen icon and re-add it after the
+  Website Data clear — the standalone instance keeps its own sticky worker.
+- **Android Chrome:** site settings → `chores.4irl.app` → Clear & reset (or long-press the icon → App info →
+  Storage → Clear storage).
+
+Once the new SW is active on a device this is never needed again: an evicted session simply shows the **Retry**
+button, and one tap runs the SW-teardown + Access re-login for you.
+
+**Reproducing an evicted session to verify the recovery UX** (do **not** clear Website Data — that removes the
+cached app + SW you need present): (1) warm the app, then Airplane Mode + reload → the gray offline banner;
+(2) warm the app, visit `https://urls4irl.cloudflareaccess.com/cdn-cgi/access/logout` (invalidates the session
+but leaves the cache/SW), return to `chores.4irl.app` → the amber "session expired — tap Retry" banner → tap
+Retry → re-auth; (3) temporarily shorten the Access application's Session Duration in Cloudflare Zero Trust
+(revert afterward).
+
 ## Where to look for X
 
 | I need to...                                                                       | Look at                                                                                                                                                                                                                                             |
