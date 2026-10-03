@@ -46,3 +46,9 @@ app is live at chores.4irl.app, and those planning docs have been removed.
 - **Issue labels:** resolve at runtime via `gh label list --repo GPropersi/chore-reaper` (do not invent labels)
 - **PR reviewer:** GPropersi
 - **Worktree policy:** `full`
+- **Worktree link:** `backend/.dev.vars frontend/.env.development.local`
+- **Worktree setup:** `install migrate-local` <!-- informational; the owned worktree-new target runs setup itself -->
+- **Worktree teardown:** `n/a`
+- **Worktree ports:** `n/a` <!-- no docker; the owned worktree-new target resolves ports -->
+- **Worktree allowed targets:** `n/a`
+- **Worktree guarded targets:** `n/a`
