@@ -45,3 +45,4 @@ app is live at chores.4irl.app, and those planning docs have been removed.
 - **GitHub project board:** n/a
 - **Issue labels:** resolve at runtime via `gh label list --repo GPropersi/chore-reaper` (do not invent labels)
 - **PR reviewer:** GPropersi
+- **Worktree policy:** `full`
