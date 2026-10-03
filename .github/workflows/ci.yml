@@ -41,6 +41,9 @@ jobs:
       - name: Format check
         run: npm run format:check
 
+      - name: Scripts tests
+        run: npm run test:scripts
+
   test-backend:
     name: Backend tests
     needs: lint

@@ -7,7 +7,7 @@ NPM_BACKEND = npm run --workspace backend
 WRANGLER    = npm exec --workspace backend -- wrangler
 
 .PHONY: help dev build \
-        test test-backend test-frontend test-e2e \
+        test test-backend test-frontend test-scripts test-e2e \
         lint lint-fix format format-check \
         migrate-local migrate-remote migrate-list migrate-list-remote migrate-new
 
@@ -26,13 +26,16 @@ build: ## Build the frontend for production
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
-test: test-backend test-frontend ## Run backend + frontend unit/integration tests
+test: test-backend test-frontend test-scripts ## Run backend + frontend + scripts unit/integration tests
 
 test-backend: ## Run backend tests (vitest, Workers pool + real D1)
 	$(NPM_ROOT) test:backend
 
 test-frontend: ## Run frontend unit tests (vitest)
 	$(NPM_ROOT) test:frontend
+
+test-scripts: ## Run scripts/ unit tests
+	$(NPM_ROOT) test:scripts
 
 test-e2e: ## Run Playwright end-to-end tests
 	$(NPM_ROOT) test:e2e
