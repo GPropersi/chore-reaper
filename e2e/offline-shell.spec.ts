@@ -83,8 +83,12 @@ test('Retry unregisters the active service worker so the recovery navigation hit
   // Retry unregistered the SW before navigating — a deterministic proxy for
   // "the recovery navigation is a real network navigation, not a SW-served
   // cache hit," which is what lets Cloudflare Access re-authenticate.
+  // Retry then navigates, which can destroy the evaluate's execution context
+  // mid-poll; treat that as "not yet settled" and poll again on the new document.
   await expect
-    .poll(() => page.evaluate(() => navigator.serviceWorker.getRegistrations().then((r) => r.length)))
+    .poll(() =>
+      page.evaluate(() => navigator.serviceWorker.getRegistrations().then((r) => r.length)).catch(() => -1),
+    )
     .toBe(0);
 });
 
