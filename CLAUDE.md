@@ -27,7 +27,7 @@ app is live at chores.4irl.app, and those planning docs have been removed.
 - **Bot push script:** `~/code/.claude/scripts/gh-app-push.sh` (central, repo-agnostic; derives the repo from `origin`, pushes as the shared bot)
 - **Token generator:** `~/code/.claude/scripts/generate-gh-token.sh` (tracked in the stronghold — the shared consolidated `gpropersi-claude` App; one generator serves every repo, auto-resolves the installation from the repo's owner. Only the private key `~/.claude/u4i-app.pem` lives outside git)
 - **Container runtime:** n/a (Node/TS monorepo run via npm workspaces; no root docker-compose — deploys to Cloudflare Workers/D1)
-- **App URL (Playwright MCP):** `http://localhost:5173` (Playwright `baseURL`; e2e webServer builds frontend then `vite preview` on :5173, backend dev on :8787, jwks on :8790)
+- **App URL (Playwright MCP):** `http://localhost:5173` by default (Playwright `baseURL`; the port is `TT_FRONTEND_PORT` from `.worktree.env` in a worktree, run `node scripts/ports.mjs print`; e2e webServer builds frontend then `vite preview` on it, backend dev on `TT_BACKEND_PORT` (8787), jwks on `TT_JWKS_PORT` (8790))
 - **Test login:** n/a (e2e seeds a household via `e2e/global-setup.ts` against a local D1; no interactive login recorded — TODO if a login flow is needed)
 - **Commands:** (via root `Makefile` — thin wrappers around the npm workspace scripts; `make help` lists all)
   | Purpose            | Command                                                                           |
@@ -42,6 +42,10 @@ app is live at chores.4irl.app, and those planning docs have been removed.
   | DB migrate (prod)  | `make migrate-remote` (apply to remote production D1 — deploy-time)               |
   | DB migrate status  | `make migrate-list` (local) / `make migrate-list-remote` (prod)                   |
   | New migration      | `make migrate-new name=<snake_case_desc>` (scaffold next numbered file)           |
+  | Script tests       | `make test-scripts` (`scripts/*.test.mjs`, node:test)                             |
+  | Install deps       | `make install` (`npm ci`)                                                         |
+  | New worktree       | `make worktree-new name=<slug> [b=<branch>] [base=<ref>]` (see docs/worktrees.md) |
+  | Remove worktree    | `make worktree-rm` (run inside the worktree)                                      |
 - **GitHub project board:** n/a
 - **Issue labels:** resolve at runtime via `gh label list --repo GPropersi/chore-reaper` (do not invent labels)
 - **PR reviewer:** GPropersi
