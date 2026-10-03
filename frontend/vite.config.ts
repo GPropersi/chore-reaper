@@ -4,8 +4,13 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import { loadPorts } from '../scripts/ports.mjs';
+import { buildVitePreviewOptions, buildViteServerOptions } from '../scripts/dev-args.mjs';
 
 export default defineConfig(({ mode }) => {
+  const { ports, source } = loadPorts();
+  const backendTarget = `http://localhost:${ports.TT_BACKEND_PORT}`;
+
   // Local-only: `wrangler dev` enforces a real Cloudflare Access JWT on every
   // request, which a browser never sends. When VITE_DEV_ACCESS_JWT is set
   // (via a gitignored frontend/.env.development.local — see backend's
@@ -47,9 +52,10 @@ export default defineConfig(({ mode }) => {
       },
     },
     server: {
+      ...buildViteServerOptions({ ports, source }),
       proxy: {
         '/api': {
-          target: 'http://localhost:8787',
+          target: backendTarget,
           configure: (proxy) => {
             if (!devAccessJwt) return;
             proxy.on('proxyReq', (proxyReq) => {
@@ -63,8 +69,9 @@ export default defineConfig(({ mode }) => {
     // server avoids the cold-start JIT-compile flakiness of `vite dev`) has its
     // own proxy config, separate from `server.proxy` above.
     preview: {
+      ...buildVitePreviewOptions({ ports, source }),
       proxy: {
-        '/api': 'http://localhost:8787',
+        '/api': backendTarget,
       },
     },
     test: {
