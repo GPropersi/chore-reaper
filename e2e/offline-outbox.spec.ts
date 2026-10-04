@@ -1,7 +1,8 @@
 import { test, expect, type APIRequestContext } from '@playwright/test';
 import { signE2eJwt } from './sign-jwt.js';
+import { loadPorts } from '../scripts/ports.mjs';
 
-const BACKEND_URL = 'http://localhost:8787';
+const BACKEND_URL = `http://localhost:${loadPorts().ports.TT_BACKEND_PORT}`;
 
 async function pendingOutboxCount(page: import('@playwright/test').Page): Promise<number> {
   return page.evaluate(() => JSON.parse(localStorage.getItem('outbox-v1') ?? '[]').length);
@@ -140,7 +141,7 @@ test('a create mutation whose ack is lost over the network is not duplicated onc
   // Simulate the request having actually reached and been applied by the server, with only the
   // ack lost on the way back — by directly creating the row against the real backend using the
   // same clientId the outbox will retry with once it flushes.
-  const preSeed = await request.post('http://localhost:8787/api/chores', {
+  const preSeed = await request.post(`${BACKEND_URL}/api/chores`, {
     headers: { 'Cf-Access-Jwt-Assertion': token, 'Content-Type': 'application/json' },
     data: {
       name: 'Water Plants',

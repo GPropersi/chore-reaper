@@ -8,6 +8,8 @@ no ongoing dependency on it.
 - **[`ARCHITECTURE.md`](ARCHITECTURE.md)** — the full map: request flow, multi-tenancy/auth model,
   database, environments, CI/CD, and a "where to look for X" index. Read this first for any non-trivial
   change.
+- **[`docs/worktrees.md`](docs/worktrees.md)** — running several checkouts side by side as git
+  worktrees (`make worktree-new` / `make worktree-rm`, per-worktree ports and local D1).
 - **[`TRADEOFFS.md`](TRADEOFFS.md)** — what this cloud-native design costs relative to a fully local
   deployment, and why it was chosen anyway.
 

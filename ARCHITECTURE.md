@@ -65,7 +65,7 @@ frontend/         React SPA — Cloudflare Pages
     outbox/                   Offline write queue (IndexedDB-backed) — queues chore mutations when offline
     cache/choresCache.ts      IndexedDB read cache for offline chore viewing
     hooks/useMidnightClock.ts Recomputes chore urgency at local midnight
-  vite.config.ts              Dev proxy to :8787, PWA manifest/workbox config
+  vite.config.ts              Dev proxy to backend (:8787 default), PWA manifest/workbox config
 
 e2e/               Playwright end-to-end tests (own JWKS fixture server, own signed-JWT helper)
 types/SharedTypes.d.ts   Types shared between backend and frontend (ApiResponse<T>, Room, etc.)
@@ -235,17 +235,25 @@ application-level (`household_id` columns), not per-tenant databases.
 Run via the `run-dev` skill (`/run-dev`) or `npm run dev` from the repo root, which runs three processes
 concurrently:
 
-1. `e2e/jwks-server.mjs` on `:8790` — serves a fixture JWKS so the backend can verify locally-signed
-   test JWTs without a real Cloudflare Access tenant.
-2. `wrangler dev` (backend) on `:8787` — real Hono app, Miniflare-local D1.
-3. `vite` (frontend) — proxies `/api/*` to `:8787`; if `VITE_DEV_ACCESS_JWT` is set
+Ports are env-driven through `scripts/ports.mjs` (defaults < `<repo>/.worktree.env` < `TT_*_PORT` env),
+with the defaults below; a worktree gets its own set (see [`docs/worktrees.md`](docs/worktrees.md)).
+
+1. `e2e/jwks-server.mjs` on `:8790` (`TT_JWKS_PORT`) — serves a fixture JWKS so the backend can verify
+   locally-signed test JWTs without a real Cloudflare Access tenant.
+2. `wrangler dev` (backend) on `:8787` (`TT_BACKEND_PORT`), launched via `scripts/dev-backend.mjs` — real
+   Hono app, Miniflare-local D1.
+3. `vite` (frontend) on `:5173` (`TT_FRONTEND_PORT`) — proxies `/api/*` to the backend port; if `VITE_DEV_ACCESS_JWT` is set
    (`frontend/.env.development.local`, gitignored), the dev proxy injects it as
    `Cf-Access-Jwt-Assertion` on every proxied request so a normal browser tab "just works" without a real
    Access login.
 
 Config: `backend/.dev.vars` (gitignored, copy from `.dev.vars.example`) supplies fixture values for
 `ACCESS_JWKS_URL` (pointed at the local `:8790` server), `ACCESS_AUD`, and Cloudflare-API-adjacent
-secrets that are never exercised for real locally.
+secrets that are never exercised for real locally. When ports come from `.worktree.env` or env, the
+backend launcher overrides `ACCESS_JWKS_URL` with `--var` to match the resolved JWKS port.
+
+`make test-e2e` no longer reuses a running `make dev` stack on the same ports (`reuseExistingServer` is
+now false): stop the dev stack first, or run e2e from another worktree.
 
 Minting a dev JWT for a specific user: `npm run dev-jwt --workspace backend -- <email>` (signs with the
 same fixture key `jwks-server.mjs` serves). Creating a brand-new local household+admin:

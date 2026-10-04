@@ -61,7 +61,9 @@ If all three already exist, skip straight to Start/Stop.
    and if it prints "not ready", run `sleep 3` as its own call and check again. Repeat up to ~10 times
    (30s total) before giving up.
 
-4. Extract the actual frontend URL (Vite falls back to another port if 5173 is taken — don't assume it):
+4. Extract the actual frontend URL (the port is `TT_FRONTEND_PORT` from `node scripts/ports.mjs print`;
+   in a worktree Vite uses strictPort and fails on a collision instead of drifting, while the primary
+   with no overrides still falls back to another port if 5173 is taken — read it from the log, don't assume it):
    ```bash
    grep -o 'Local:   http://localhost:[0-9]*' .claude/run-dev/dev.log | tail -1
    ```
@@ -102,8 +104,9 @@ previous step's plain-text output and splicing the literal value into the next c
    echo "stopped"
    ```
 
-Confirm the ports are actually free afterward (`lsof -i :8790 -i :8787 -sTCP:LISTEN -P` should be empty;
-the frontend port varies, don't bother checking it) and report the result to the user in one line —
+Confirm the ports are actually free afterward (take the resolved ports from `node scripts/ports.mjs print`,
+then `lsof -i :<TT_JWKS_PORT> -i :<TT_BACKEND_PORT> -sTCP:LISTEN -P` should be empty; the primary's
+frontend port can drift, don't bother checking it) and report the result to the user in one line —
 don't leave `.claude/run-dev/dev.log` around forever, but no need to delete it either (next start
 overwrites it).
 
@@ -112,7 +115,9 @@ overwrites it).
 - Don't use the Bash tool's own `run_in_background: true` for the start command — the `nohup ... &`
   pattern above already backgrounds it at the OS level and returns immediately, and critically produces
   a PID that survives independent of this Claude session, which a future `/run-dev stop` needs.
-- Port 5173 may already be in use by something unrelated to this project (seen previously: a stray SSH
-  tunnel) — Vite auto-falls back to 5174+, which is why the URL must be read from the log, never assumed.
+- The frontend port (default 5173) may already be in use by something unrelated to this project (seen
+  previously: a stray SSH tunnel) — in the primary with no overrides Vite auto-falls back to 5174+, which
+  is why the URL must be read from the log, never assumed. In a worktree (ports from `.worktree.env`)
+  Vite uses strictPort and fails instead.
 - `frontend/.env.development.local` and `backend/.dev.vars` are both gitignored on purpose (real/test
   secrets) — never suggest committing them.

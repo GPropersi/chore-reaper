@@ -13,3 +13,5 @@ playwright/.cache/
 .claude/run-dev/
 changelog/
 backups/
+.claude/worktrees/
+.worktree.env

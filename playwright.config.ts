@@ -1,4 +1,13 @@
 import { defineConfig } from '@playwright/test';
+import { loadPorts } from './scripts/ports.mjs';
+
+const { ports } = loadPorts();
+// Children inherit the resolved ports so every process agrees (and reports source 'env').
+const portEnv = {
+  TT_JWKS_PORT: String(ports.TT_JWKS_PORT),
+  TT_BACKEND_PORT: String(ports.TT_BACKEND_PORT),
+  TT_FRONTEND_PORT: String(ports.TT_FRONTEND_PORT),
+};
 
 export default defineConfig({
   testDir: './e2e',
@@ -14,20 +23,23 @@ export default defineConfig({
   // serially against the shared state.
   workers: 1,
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: `http://localhost:${ports.TT_FRONTEND_PORT}`,
   },
   webServer: [
     {
       command: 'node jwks-server.mjs',
       cwd: './e2e',
-      port: 8790,
-      reuseExistingServer: !process.env.CI,
+      port: ports.TT_JWKS_PORT,
+      env: portEnv,
+      // Never attach to a stack another checkout (or `make dev`) already started.
+      reuseExistingServer: false,
     },
     {
       command: 'npm run dev',
       cwd: './backend',
-      port: 8787,
-      reuseExistingServer: !process.env.CI,
+      port: ports.TT_BACKEND_PORT,
+      env: portEnv,
+      reuseExistingServer: false,
       timeout: 30_000,
     },
     {
@@ -39,10 +51,11 @@ export default defineConfig({
       // a moment behind the port opening, which showed up as a 404 on the very
       // first navigation once vite-plugin-pwa's extra build step made this gap
       // wide enough to hit reliably.
-      command: 'npm run build && npm run preview -- --port 5173 --strictPort',
+      command: `npm run build && npm run preview -- --port ${ports.TT_FRONTEND_PORT} --strictPort`,
       cwd: './frontend',
-      url: 'http://localhost:5173',
-      reuseExistingServer: !process.env.CI,
+      url: `http://localhost:${ports.TT_FRONTEND_PORT}`,
+      env: portEnv,
+      reuseExistingServer: false,
       timeout: 60_000,
     },
   ],

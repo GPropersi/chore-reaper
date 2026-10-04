@@ -6,8 +6,8 @@ NPM_ROOT    = npm run
 NPM_BACKEND = npm run --workspace backend
 WRANGLER    = npm exec --workspace backend -- wrangler
 
-.PHONY: help dev build \
-        test test-backend test-frontend test-e2e \
+.PHONY: help install dev build worktree-new worktree-rm \
+        test test-backend test-frontend test-scripts test-e2e \
         lint lint-fix format format-check \
         migrate-local migrate-remote migrate-list migrate-list-remote migrate-new
 
@@ -18,21 +18,36 @@ help: ## Show this help message
 
 # ── Dev / build ───────────────────────────────────────────────────────────────
 
+install: ## npm ci (root workspaces)
+	npm ci
+
 dev: ## Run the full dev stack (jwks + backend + frontend, via concurrently)
 	$(NPM_ROOT) dev
 
 build: ## Build the frontend for production
 	$(NPM_ROOT) build:frontend
 
+# ── Worktrees ─────────────────────────────────────────────────────────────────
+# Owned targets (column 0) so the stronghold's wt.sh dispatches here. See docs/worktrees.md.
+
+worktree-new: ## Create a worktree: make worktree-new name=<slug> [b=<branch>] [base=<ref>]
+	WT_NAME='$(subst ','\'',$(name))' WT_BRANCH='$(subst ','\'',$(b))' WT_BASE='$(subst ','\'',$(base))' node scripts/worktree.mjs new
+
+worktree-rm: ## Remove this worktree (run inside it)
+	node scripts/worktree.mjs rm
+
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
-test: test-backend test-frontend ## Run backend + frontend unit/integration tests
+test: test-backend test-frontend test-scripts ## Run backend + frontend + scripts unit/integration tests
 
 test-backend: ## Run backend tests (vitest, Workers pool + real D1)
 	$(NPM_ROOT) test:backend
 
 test-frontend: ## Run frontend unit tests (vitest)
 	$(NPM_ROOT) test:frontend
+
+test-scripts: ## Run scripts/ unit tests
+	$(NPM_ROOT) test:scripts
 
 test-e2e: ## Run Playwright end-to-end tests
 	$(NPM_ROOT) test:e2e
