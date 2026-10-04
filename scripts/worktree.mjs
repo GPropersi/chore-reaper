@@ -20,6 +20,7 @@ import {
   realpathSync,
   renameSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
@@ -30,6 +31,7 @@ import { formatEnvFile, parseEnvFile, probePort, resolvePorts } from './ports.mj
 const REPO_NAMES = new Set(['tasktracker', 'chore-reaper']);
 const LINK_FILES = ['backend/.dev.vars', 'frontend/.env.development.local'];
 const LOCK_NAME = 'tt-worktree-slot.lock';
+const LOCK_GRACE_MS = 5000;
 
 function runGit(cwd, args) {
   return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
@@ -226,9 +228,18 @@ function pidAlive(pid) {
   }
 }
 
+function isFreshLock(lock) {
+  try {
+    return Date.now() - statSync(lock).mtimeMs < LOCK_GRACE_MS;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Claim the slot lock: exclusive mkdir of <git-common-dir>/tt-worktree-slot.lock holding a
- * pid file. A lock whose pid is dead (or missing/unparsable) is cleared and retried once.
+ * pid file. A lock whose pid is dead, or missing/unparsable and older than LOCK_GRACE_MS, is
+ * cleared and retried once.
  * Returns release().
  */
 export function acquireSlotLock(primaryRoot) {
@@ -244,9 +255,12 @@ export function acquireSlotLock(primaryRoot) {
       try {
         pid = Number.parseInt(readFileSync(path.join(lock, 'pid'), 'utf8'), 10);
       } catch {
-        // missing pid file: stale
+        // missing pid file: stale unless the lock is brand new (see grace below)
       }
       if (Number.isInteger(pid) && pid > 0 && pidAlive(pid)) break;
+      // A fresh lock with no readable pid yet is a racing holder between mkdir and its pid
+      // write: count it as held rather than clearing it.
+      if (!(Number.isInteger(pid) && pid > 0) && isFreshLock(lock)) break;
       rmSync(lock, { recursive: true, force: true });
     }
   }
@@ -281,6 +295,12 @@ export async function newWorktree({
       isFree,
     });
     writeWorktreeEnv({ dir: plan.path, slug: plan.slug, primaryRoot, ports });
+  } catch (err) {
+    throw new Error(
+      `worktree created at ${plan.path} but port/env setup failed: ${err.message}\n` +
+        `  discard it:   make -C ${plan.path} worktree-rm`,
+      { cause: err },
+    );
   } finally {
     release();
   }

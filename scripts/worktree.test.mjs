@@ -8,10 +8,13 @@ import {
   readlinkSync,
   rmSync,
   statSync,
+  utimesSync,
   writeFileSync,
 } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { parseEnvFile } from './ports.mjs';
 import { git, makeTempRepo } from './test-git-repo.mjs';
 import {
@@ -319,9 +322,44 @@ describe('acquireSlotLock', () => {
     const r1 = acquireSlotLock(root);
     r1();
     mkdirSync(lock);
+    const old = new Date(Date.now() - 60_000);
+    utimesSync(lock, old, old);
     const r2 = acquireSlotLock(root);
     r2();
     assert.equal(existsSync(lock), false);
+  });
+
+  it('does not clear a fresh lock that has no pid yet', () => {
+    const { root } = primaryWithOrigin();
+    const lock = path.join(commonDir(root), 'tt-worktree-slot.lock');
+    mkdirSync(lock);
+    assert.throws(() => acquireSlotLock(root), /another worktree-new/);
+    assert.ok(existsSync(lock));
+  });
+});
+
+describe('worktree.mjs CLI', () => {
+  const script = fileURLToPath(new URL('./worktree.mjs', import.meta.url));
+  const cleanEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('WT_')));
+
+  function runCli(cwd, args) {
+    return spawnSync('node', [script, ...args], { cwd, env: cleanEnv, encoding: 'utf8' });
+  }
+
+  it('rm outside a worktree refuses', () => {
+    const { root } = primaryWithOrigin();
+    const result = runCli(root, ['rm']);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /refusing to remove/);
+    assert.ok(existsSync(root));
+  });
+
+  it('new without a name fails clearly and creates nothing', () => {
+    const { root } = primaryWithOrigin();
+    const result = runCli(root, ['new']);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /a name or branch is required/);
+    assert.equal(existsSync(path.join(root, '.claude', 'worktrees')), false);
   });
 });
 
@@ -408,8 +446,9 @@ describe('newWorktree', () => {
     assert.equal(existsSync(path.join(root, '.claude', 'worktrees', 'locked', '.worktree.env')), false);
   });
 
-  it('releases the lock when port resolution fails', async () => {
+  it('releases the lock and leaves the worktree with a recovery hint when port resolution fails', async () => {
     const { root } = primaryWithOrigin();
+    const wtPath = path.join(root, '.claude', 'worktrees', 'exhausted');
     await assert.rejects(
       newWorktree({
         primaryRoot: root,
@@ -417,8 +456,15 @@ describe('newWorktree', () => {
         isFree: () => false,
         runSetup: () => {},
       }),
-      /TT_JWKS_PORT/,
+      (err) => {
+        assert.match(err.message, /TT_JWKS_PORT/);
+        assert.ok(err.message.includes(wtPath));
+        assert.ok(err.message.includes(`make -C ${wtPath} worktree-rm`));
+        return true;
+      },
     );
+    assert.ok(existsSync(wtPath));
+    assert.match(git(root, ['branch', '--list', 'exhausted']), /exhausted/);
     assert.equal(existsSync(path.join(commonDir(root), 'tt-worktree-slot.lock')), false);
   });
 });
