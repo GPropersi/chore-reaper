@@ -64,7 +64,7 @@ export function formatEnvFile(obj) {
 function parsePort(key, value) {
   const text = String(value).trim();
   const num = Number(text);
-  if (!/^\d+$/.test(text) || !Number.isInteger(num) || num < 1 || num > 65535) {
+  if (!/^\d+$/.test(text) || num < 1 || num > 65535) {
     throw new Error(`${key} must be an integer port between 1 and 65535 (got ${JSON.stringify(value)})`);
   }
   return num;
@@ -123,19 +123,18 @@ export async function resolvePorts({
   } else {
     const claimedPorts = new Set();
     for (const claimed of new Set([0, ...claimedSlots])) {
-      for (const p of Object.values(portsForSlot(claimed))) claimedPorts.add(p);
+      for (const port of Object.values(portsForSlot(claimed))) claimedPorts.add(port);
     }
     const start = crc32(slug) % SLOT_COUNT;
     let found = null;
     for (let i = 0; i < SLOT_COUNT && found === null; i += 1) {
       const candidate = ((start + i) % SLOT_COUNT) + 1;
-      if (claimedSlots.has(candidate)) continue;
       const candidatePorts = portsForSlot(candidate);
       const values = Object.values(candidatePorts);
-      if (values.some((p) => claimedPorts.has(p))) continue;
+      if (values.some((port) => claimedPorts.has(port))) continue;
       let free = true;
-      for (const p of values) {
-        if (!(await isFree(p))) {
+      for (const port of values) {
+        if (!(await isFree(port))) {
           free = false;
           break;
         }

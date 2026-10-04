@@ -53,14 +53,14 @@ function worktreesDir(primaryRoot) {
 }
 
 /** Lowercase, non-[a-z0-9-] to '-', strip leading '-', cut to 40, strip trailing '-'. */
-export function dnsSlug(s) {
-  const slug = String(s)
+export function dnsSlug(value) {
+  const slug = String(value)
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, '-')
     .replace(/^-+/, '')
     .slice(0, 40)
     .replace(/-+$/, '');
-  if (!slug) throw new Error(`slug is empty after normalizing ${JSON.stringify(s)}`);
+  if (!slug) throw new Error(`slug is empty after normalizing ${JSON.stringify(value)}`);
   return slug;
 }
 
@@ -95,11 +95,8 @@ export function planNew({ primaryRoot, name, branch, base }) {
   const wtPath = path.join(worktreesDir(primaryRoot), slug);
   if (existsSync(wtPath)) throw new Error(`worktree ${wtPath} already exists`);
 
-  if (
-    branchName.startsWith('-') ||
-    branchName.includes('@{') ||
-    !gitOk(primaryRoot, ['check-ref-format', '--branch', branchName])
-  ) {
+  // The explicit '-' guard stops a branch name from being parsed as a git option.
+  if (branchName.startsWith('-') || !gitOk(primaryRoot, ['check-ref-format', '--branch', branchName])) {
     throw new Error(`invalid branch name ${JSON.stringify(branchName)}`);
   }
 
