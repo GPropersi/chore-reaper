@@ -22,7 +22,13 @@ app is live at chores.4irl.app, and those planning docs have been removed.
 
 - **Repo slug:** `GPropersi/chore-reaper` (this directory is named `tasktracker` but the repo is `chore-reaper`, live at chores.4irl.app)
 - **Default branch:** `main`
-- **Plans/reviews layout:** `plans/<topic>/` (gitignored; not currently present in the tree — created on demand)
+- **Plans store (central):** `~/code/plans/tasktracker/{open,completed,research}/<topic>/` <!-- reviews/mocks/plan-research co-located per plan; full rules in ~/code/CLAUDE.md "Central Plans Store" -->
+- **Plans bucket:** `tasktracker` <!-- directory under ~/code/plans/ for this repo's plans; explicit, never inferred from the slug or the directory name -->
+- **Push gate:** (suites a push must pass; first matching row wins per changed path, all matched suites run sequentially)
+  | Paths (space-separated globs)                         | Command                      |
+  | ----------------------------------------------------- | ---------------------------- |
+  | `docs/** changelog/** *.md LICENSE .claude/skills/**` | na docs and skill prose only |
+  | `**`                                                  | `make lint test build`       |
 - **Bot identity:** `gpropersi-claude[bot]` `141576524+gpropersi-claude[bot]@users.noreply.github.com` <!-- consolidated shared bot; replaced repo-local c4i-claude-bot -->
 - **Bot push script:** `~/code/.claude/scripts/gh-app-push.sh` (central, repo-agnostic; derives the repo from `origin`, pushes as the shared bot)
 - **Token generator:** `~/code/.claude/scripts/generate-gh-token.sh` (tracked in the stronghold — the shared consolidated `gpropersi-claude` App; one generator serves every repo, auto-resolves the installation from the repo's owner. Only the private key `~/.claude/u4i-app.pem` lives outside git)
