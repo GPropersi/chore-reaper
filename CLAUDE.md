@@ -11,13 +11,22 @@ Read `README.md` in the repo root for architecture/design rationale. The Cloudfl
 plan (formerly `CLOUDFLARE.md`/`CLOUD_PLAN.md`) is complete — Part A and Part B are both fully done, the
 app is live at chores.4irl.app, and those planning docs have been removed.
 
+## Commit attribution
+
+Standing rule (user instruction, 2026-07-06, carried over from the removed repo-local `bot-push` skill):
+commits and PRs on this repo show **bot-only attribution** — no `Co-Authored-By: Claude` or
+`Claude-Session:` trailer and no human co-author. Commits are authored as the `Bot identity` below
+(`/git-commit` does this). After opening a PR, confirm with
+`~/code/.claude/scripts/gh-bot.sh pr view <N> --json author,commits` and expect only
+`gpropersi-claude[bot]`; fix any second login before reporting done.
+
 ## Claude Config
 
 <!-- Consumed by the stronghold's central generic skills (see ~/code/CLAUDE.md).
      Stable keys — do not rename. This repo now uses the SHARED consolidated bot
      (`gpropersi-claude`, one GitHub App across all repos) via the central push script + the
      tracked stronghold generator (`~/code/.claude/scripts/generate-gh-token.sh`) — the old
-     repo-local `chore-reaper-claude` App toolkit under .claude/scripts/ is retired. Account-specific App/install IDs and GraphQL IDs are NOT
+     repo-local `chore-reaper-claude` App toolkit that lived under .claude/scripts/ has been removed. Account-specific App/install IDs and GraphQL IDs are NOT
      inlined here (secrets policy); only the public bot login + noreply email are recorded. -->
 
 - **Repo slug:** `GPropersi/chore-reaper` (this directory is named `tasktracker` but the repo is `chore-reaper`, live at chores.4irl.app)

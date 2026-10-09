@@ -71,7 +71,7 @@ e2e/               Playwright end-to-end tests (own JWKS fixture server, own sig
 types/SharedTypes.d.ts   Types shared between backend and frontend (ApiResponse<T>, Room, etc.)
 scripts/           Root-level scripts (git hooks installer)
 .github/workflows/ci.yml   The entire CI/CD pipeline
-.claude/           Agent tooling: skills (run-dev, bot-push), scripts (GitHub App auth for bot pushes)
+.claude/           Agent tooling: skills (run-dev)
 ```
 
 ## Request flow
@@ -398,7 +398,7 @@ Retry → re-auth; (3) temporarily shorten the Access application's Session Dura
 | Change routing/top-level data loading                                              | `frontend/src/App.tsx`                                                                                                                                                                                                                              |
 | Change the offline write queue                                                     | `frontend/src/outbox/`                                                                                                                                                                                                                              |
 | Run local dev                                                                      | `/run-dev` skill, or `npm run dev` at repo root                                                                                                                                                                                                     |
-| Push a branch / open a PR as the bot                                               | `/bot-push` skill (`c4i-claude-bot[bot]`, standing default per project instructions — don't ask first)                                                                                                                                              |
+| Push a branch / open a PR as the bot                                               | `/git-push` skill (`gpropersi-claude[bot]`, standing default per project instructions — don't ask first)                                                                                                                                            |
 | Understand the cloud-vs-local tradeoff rationale                                   | `TRADEOFFS.md`                                                                                                                                                                                                                                      |
 | Check the day's work log                                                           | `changelog/MM-DD-YYYY-changelog.md`                                                                                                                                                                                                                 |
 | Change CI/CD                                                                       | `.github/workflows/ci.yml`                                                                                                                                                                                                                          |
